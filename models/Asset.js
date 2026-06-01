@@ -1,0 +1,70 @@
+const { DataTypes } = require('sequelize');
+
+module.exports = (sequelize) => {
+  const Asset = sequelize.define('Asset', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
+    asset_tag: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: false
+    },
+    category: {
+      type: DataTypes.ENUM('IT', 'Non-IT'),
+      allowNull: false
+    },
+    sub_type: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    serial_no: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    mac_address: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    status: {
+      type: DataTypes.ENUM('active', 'inactive', 'disposed'),
+      defaultValue: 'active',
+      allowNull: false
+    },
+    purchase_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'purchases',
+        key: 'id'
+      }
+    },
+    assigned_to: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
+    created_at: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    }
+  }, {
+    tableName: 'assets',
+    timestamps: false,
+    createdAt: 'created_at'
+  });
+
+  Asset.associate = (models) => {
+    Asset.belongsTo(models.Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+    Asset.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
+    Asset.hasOne(models.AssetDetail, { foreignKey: 'asset_id', as: 'detail' });
+    Asset.hasMany(models.AuditLog, { foreignKey: 'asset_id', as: 'auditLogs' });
+  };
+
+  return Asset;
+};
