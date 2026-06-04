@@ -31,6 +31,13 @@ export const PurchaseForm = () => {
 
     if (!formData.vendor_name.trim()) newErrors.vendor_name = 'Vendor name is required';
     if (!formData.vendor_contact.trim()) newErrors.vendor_contact = 'Contact number is required';
+    else {
+      const phoneRegex = /^\d{10}$/;
+      const cleanPhone = formData.vendor_contact.replace(/\D/g, '');
+      if (!phoneRegex.test(cleanPhone)) {
+        newErrors.vendor_contact = 'Contact number must be 10 digits';
+      }
+    }
     if (!formData.vendor_email.trim()) newErrors.vendor_email = 'Email is required';
     else if (!formData.vendor_email.includes('@')) newErrors.vendor_email = 'Invalid email format';
     if (!formData.vendor_address.trim()) newErrors.vendor_address = 'Vendor address is required';

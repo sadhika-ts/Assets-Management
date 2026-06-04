@@ -117,6 +117,32 @@ export const Purchases = () => {
 
       console.log('✅ Fetched purchases:', purchases.length);
       setMockPurchases(purchases);
+
+      // Extract unique vendors from purchases
+      const uniqueVendors = [];
+      const vendorMap = new Map();
+
+      purchases.forEach(purchase => {
+        if (!vendorMap.has(purchase.vendor_name)) {
+          vendorMap.set(purchase.vendor_name, {
+            id: purchase.vendor_name,
+            name: purchase.vendor_name,
+            contact: purchase.vendor_contact || 'N/A',
+            email: purchase.vendor_email || 'N/A',
+            address: purchase.vendor_address || 'N/A',
+            totalPurchases: 1,
+            totalSpent: parseFloat(purchase.total_amount) || 0,
+            rating: 4.5
+          });
+        } else {
+          const vendor = vendorMap.get(purchase.vendor_name);
+          vendor.totalPurchases += 1;
+          vendor.totalSpent += parseFloat(purchase.total_amount) || 0;
+        }
+      });
+
+      vendorMap.forEach(vendor => uniqueVendors.push(vendor));
+      setMockVendors(uniqueVendors);
       setLoading(false);
 
       // Show success toast if this is a refresh after creating new purchase

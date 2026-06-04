@@ -178,7 +178,8 @@ router.post(
   [
     // REQUIRED FIELDS
     body('vendor_name').trim().notEmpty().withMessage('Vendor name is required'),
-    body('vendor_contact').trim().notEmpty().withMessage('Vendor contact number is required'),
+    body('vendor_contact').trim().notEmpty().withMessage('Vendor contact number is required')
+      .matches(/^\d{10}$/).withMessage('Contact number must be exactly 10 digits'),
     body('vendor_email').trim().notEmpty().withMessage('Vendor email is required')
       .isEmail().withMessage('Invalid vendor email format'),
     body('vendor_address').trim().notEmpty().withMessage('Vendor address is required'),
