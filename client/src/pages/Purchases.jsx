@@ -164,11 +164,59 @@ export const Purchases = () => {
     }
   };
 
-  const purchaseTrendData = [];
+  // Generate Purchase Trend Data (by month)
+  const purchaseTrendData = (() => {
+    const trendMap = new Map();
+    mockPurchases.forEach(purchase => {
+      const date = new Date(purchase.purchase_date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
-  const categoryDistribution = [];
+      if (!trendMap.has(monthKey)) {
+        trendMap.set(monthKey, { month: monthLabel, amount: 0, count: 0 });
+      }
+      const entry = trendMap.get(monthKey);
+      entry.amount += parseFloat(purchase.total_amount) || 0;
+      entry.count += 1;
+    });
+    return Array.from(trendMap.values()).sort((a, b) => a.month.localeCompare(b.month));
+  })();
 
-  const vendorPerformanceData = [];
+  // Generate Status Distribution Data
+  const categoryDistribution = (() => {
+    const statusMap = new Map();
+    const colors = { pending: '#FFA500', ordered: '#3b82f6', delivered: '#22c55e', cancelled: '#ef4444' };
+
+    mockPurchases.forEach(purchase => {
+      if (!statusMap.has(purchase.status)) {
+        statusMap.set(purchase.status, 0);
+      }
+      statusMap.set(purchase.status, statusMap.get(purchase.status) + 1);
+    });
+
+    return Array.from(statusMap.entries()).map(([status, count]) => ({
+      name: status.charAt(0).toUpperCase() + status.slice(1),
+      value: count,
+      color: colors[status] || '#888888'
+    }));
+  })();
+
+  // Generate Vendor Performance Data
+  const vendorPerformanceData = (() => {
+    const vendorMap = new Map();
+    mockPurchases.forEach(purchase => {
+      if (!vendorMap.has(purchase.vendor_name)) {
+        vendorMap.set(purchase.vendor_name, { name: purchase.vendor_name, spent: 0, orders: 0 });
+      }
+      const vendor = vendorMap.get(purchase.vendor_name);
+      vendor.spent += parseFloat(purchase.total_amount) || 0;
+      vendor.orders += 1;
+    });
+    return Array.from(vendorMap.values())
+      .sort((a, b) => b.spent - a.spent)
+      .slice(0, 8)
+      .map(v => ({ name: v.name.substring(0, 12), spent: v.spent / 100000, orders: v.orders }));
+  })();
 
   const filteredPurchases = mockPurchases.filter(purchase => {
     const matchesSearch = purchase.purchase_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -411,7 +459,7 @@ export const Purchases = () => {
             {/* Category Distribution & Vendor Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Category Distribution</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Status Distribution</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -419,7 +467,7 @@ export const Purchases = () => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ₹${(value / 100000).toFixed(1)}L`}
+                      label={({ name, value }) => `${name}: ${value}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -428,7 +476,7 @@ export const Purchases = () => {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value) => `${value} orders`} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -455,9 +503,15 @@ export const Purchases = () => {
                 <h3 className="text-lg font-semibold mb-4">📊 Purchase Summary</h3>
                 <div className="space-y-3 text-sm">
                   <p>Total Purchases: <strong>{mockPurchases.length}</strong> orders</p>
-                  <p>Total Amount: <strong>₹{(mockPurchases.reduce((sum, p) => sum + p.total_amount, 0) / 100000).toFixed(1)}L</strong></p>
-                  <p>Avg Order: <strong>₹{Math.round(mockPurchases.reduce((sum, p) => sum + p.total_amount, 0) / mockPurchases.length / 100000 * 100)}K</strong></p>
-                  <p>Top Vendor: <strong>{mockVendors[3].name}</strong></p>
+                  <p>Total Amount: <strong>₹{(() => {
+                    const total = mockPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
+                    return (total >= 100000) ? (total / 100000).toFixed(1) + 'L' : total.toLocaleString();
+                  })()}</strong></p>
+                  <p>Avg Order: <strong>₹{(() => {
+                    const avg = mockPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0) / mockPurchases.length;
+                    return (avg >= 100000) ? (avg / 100000).toFixed(2) + 'L' : Math.round(avg).toLocaleString();
+                  })()}</strong></p>
+                  <p>Top Vendor: <strong>{vendorPerformanceData[0]?.name || 'N/A'}</strong></p>
                 </div>
               </div>
 
