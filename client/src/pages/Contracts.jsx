@@ -109,19 +109,17 @@ export const Contracts = () => {
 
   const fetchContracts = async () => {
     try {
-      console.log('📥 Fetching all contracts from API...');
-      const response = await api.get('/contracts');
-      const contracts = response.data?.data?.contracts || response.data || [];
-
-      console.log('✅ Fetched contracts:', contracts.length);
+      const response = await api.get('/contracts?limit=500');
+      const raw = response.data?.data?.contracts || [];
+      // Normalize contract_value to number
+      const contracts = raw.map(c => ({
+        ...c,
+        contract_value: parseFloat(c.contract_value) || 0
+      }));
       setMockContracts(contracts);
       setLoading(false);
-
-      // Show success toast if this is a refresh after creating new contract
       const shouldRefresh = searchParams.get('refresh') === 'true';
-      if (shouldRefresh) {
-        toast.success('✅ Contracts list updated with new contract!');
-      }
+      if (shouldRefresh) toast.success('✅ Contracts list updated!');
     } catch (error) {
       console.error('Error fetching contracts:', error);
       setLoading(false);
@@ -134,14 +132,38 @@ export const Contracts = () => {
   const expiredContracts = mockContracts.filter(c => c.status === 'expired').length;
   const renewalDue = mockContracts.filter(c => c.status === 'renewal_due').length;
 
-  // Contract Timeline Data
-  const contractTimelineData = [];
+  // Status distribution for pie chart
+  const valueDistribution = [
+    { name: 'Active', value: mockContracts.filter(c => c.status === 'active').length, color: '#22c55e' },
+    { name: 'Expiring Soon', value: mockContracts.filter(c => c.status === 'expiring_soon').length, color: '#f97316' },
+    { name: 'Expired', value: mockContracts.filter(c => c.status === 'expired').length, color: '#ef4444' },
+    { name: 'Upcoming', value: mockContracts.filter(c => c.status === 'upcoming').length, color: '#3b82f6' },
+  ].filter(d => d.value > 0);
 
-  // Contract Value Distribution
-  const valueDistribution = [];
+  // Contract value by vendor (top 8)
+  const vendorContracts = (() => {
+    const map = new Map();
+    mockContracts.forEach(c => {
+      if (!map.has(c.vendor_name)) map.set(c.vendor_name, { name: c.vendor_name.substring(0, 14), value: 0, count: 0 });
+      map.get(c.vendor_name).value += c.contract_value;
+      map.get(c.vendor_name).count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => b.value - a.value).slice(0, 8);
+  })();
 
-  // Vendor Contracts
-  const vendorContracts = [];
+  // Timeline: contracts by expiry month
+  const contractTimelineData = (() => {
+    const map = new Map();
+    mockContracts.forEach(c => {
+      const d = new Date(c.active_till);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (!map.has(key)) map.set(key, { month: label, active: 0, expired: 0 });
+      if (c.status === 'expired') map.get(key).expired += 1;
+      else map.get(key).active += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
+  })();
 
   // Filter contracts
   const filteredContracts = mockContracts.filter(contract => {
@@ -167,8 +189,14 @@ export const Contracts = () => {
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
-    toast.success(`Contract ${deleteTarget.contractId} deleted successfully`);
+  const confirmDelete = async () => {
+    try {
+      await api.delete(`/contracts/${deleteTarget.id}`);
+      toast.success(`Contract ${deleteTarget.contractId} deleted successfully`);
+      setMockContracts(prev => prev.filter(c => c.id !== deleteTarget.id));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete contract');
+    }
     setShowDeleteModal(false);
     setDeleteTarget(null);
   };
@@ -451,7 +479,7 @@ export const Contracts = () => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ₹${(value / 100000).toFixed(1)}L`}
+                      label={({ name, value }) => `${name}: ${value}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -486,8 +514,8 @@ export const Contracts = () => {
                 <h3 className="text-lg font-semibold mb-4">📊 Statistics</h3>
                 <div className="space-y-3 text-sm">
                   <p>Total Contracts: <strong>{mockContracts.length}</strong></p>
-                  <p>Avg Contract Value: <strong>₹{Math.round(mockContracts.reduce((sum, c) => sum + c.contract_value, 0) / mockContracts.length / 100000 * 100)}K</strong></p>
-                  <p>Highest Value: <strong>₹{(Math.max(...mockContracts.map(c => c.contract_value)) / 100000).toFixed(1)}L</strong></p>
+                  <p>Avg Contract Value: <strong>₹{mockContracts.length ? Math.round(mockContracts.reduce((sum, c) => sum + c.contract_value, 0) / mockContracts.length).toLocaleString() : 0}</strong></p>
+                  <p>Highest Value: <strong>₹{mockContracts.length ? Math.max(...mockContracts.map(c => c.contract_value)).toLocaleString() : 0}</strong></p>
                 </div>
               </div>
 
@@ -520,10 +548,10 @@ export const Contracts = () => {
               <div className="space-y-4">
                 {mockContracts.map(contract => (
                   <div key={contract.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-semibold text-gray-800">{contract.contract_name}</h4>
-                        <p className="text-sm text-gray-600">{contract.vendor_name}</p>
+                        <p className="text-sm text-gray-600">{contract.contract_id} — {contract.vendor_name}</p>
                       </div>
                       <button
                         onClick={() => setShowUploadModal(true)}
@@ -532,18 +560,15 @@ export const Contracts = () => {
                         📤 Upload
                       </button>
                     </div>
-                    <div className="space-y-2">
-                      {contract.documents.map((doc, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-gray-50 p-2 rounded">
-                          <span className="text-xl">📄</span>
-                          <span className="text-sm text-gray-700">{doc}</span>
-                          <div className="ml-auto flex gap-2">
-                            <button className="text-blue-600 text-sm hover:text-blue-800">Download</button>
-                            <button className="text-red-600 text-sm hover:text-red-800">Delete</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    {contract.document_path && (
+                      <div className="mt-3 flex items-center gap-3 bg-gray-50 p-2 rounded">
+                        <span className="text-xl">📄</span>
+                        <span className="text-sm text-gray-700">{contract.document_path}</span>
+                      </div>
+                    )}
+                    {!contract.document_path && (
+                      <p className="text-xs text-gray-400 mt-2">No document uploaded</p>
+                    )}
                   </div>
                 ))}
               </div>
