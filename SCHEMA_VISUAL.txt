@@ -1,0 +1,370 @@
+================================================================================
+                    DATABASE SCHEMA - VISUAL DIAGRAM
+================================================================================
+
+                              IT ASSET INVENTORY MANAGEMENT SYSTEM
+                                      PostgreSQL
+
+================================================================================
+TABLE STRUCTURE
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              USERS TABLE                                  │
+├──────────────────────────────────────────────────────────────────────────┤
+│ PK: id (UUID)                                                             │
+│ - name (VARCHAR)                                                          │
+│ - email (VARCHAR, UNIQUE)                                                 │
+│ - password_hash (VARCHAR)                                                 │
+│ - role (ENUM: admin, staff, viewer)                                       │
+│ - created_at (TIMESTAMP)                                                  │
+└──────────────────────────────────────────────────────────────────────────┘
+                                    ▲
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+            (1:N) assigned_to   (1:N) user_id   (1:N) user_id
+                    │               │               │
+                    ▼               ▼               ▼
+┌──────────────────────────────┐  ┌──────────────────┐  ┌─────────────────────┐
+│      ASSETS TABLE            │  │  AUDIT_LOGS      │  │  ASSET_HISTORY      │
+├──────────────────────────────┤  ├──────────────────┤  ├─────────────────────┤
+│ PK: id (UUID)                │  │ PK: id (UUID)    │  │ PK: id (UUID)       │
+│ - asset_tag (VARCHAR,UNIQUE) │  │ FK: asset_id     │  │ FK: asset_id        │
+│ - category (ENUM)            │  │ FK: user_id      │  │ FK: user_id         │
+│ - sub_type (VARCHAR)         │  │ - action         │  │ - action (ENUM)     │
+│ - other_subtype_desc (TEXT)  │  │ - old_value      │  │ - previous_value(J) │
+│ - serial_no (VARCHAR)        │  │ - new_value      │  │ - new_value (JSON)  │
+│ - mac_address (VARCHAR)      │  │ - changed_at     │  │ - description       │
+│ - status (ENUM)              │  └──────────────────┘  │ - created_at        │
+│ FK: purchase_id              │                        └─────────────────────┘
+│ FK: assigned_to              │
+│ - created_at (TIMESTAMP)     │
+└────────────┬─────────────────┘
+             │
+        (1:1) │
+             ▼
+┌──────────────────────────────┐
+│   ASSET_DETAILS TABLE        │
+├──────────────────────────────┤
+│ PK: id (UUID)                │
+│ FK: asset_id (UNIQUE)        │
+│ - os_type (VARCHAR)          │
+│ - os_version (VARCHAR)       │
+│ - product_id (VARCHAR)       │
+│ - os_activated (BOOLEAN)     │
+│ - processor_name (VARCHAR)   │
+│ - manufacturer (VARCHAR)     │
+│ - cores (INTEGER)            │
+│ - ram_gb (FLOAT)             │
+│ - disk_gb (FLOAT)            │
+│ - disk_model (VARCHAR)       │
+│ - ms_office (BOOLEAN)        │
+│ - office_key (VARCHAR)       │
+│ - other_apps_installed (BOO) │
+│ - other_apps_description(TX) │
+│ - software_list (TEXT)       │
+│ - configuration (TEXT)       │
+│ - others (TEXT)              │
+│ - created_at (TIMESTAMP)     │
+└──────────────────────────────┘
+
+       (1:N) purchase_id
+             │
+             ▼
+┌──────────────────────────────┐
+│    PURCHASES TABLE           │
+├──────────────────────────────┤
+│ PK: id (UUID)                │
+│ - purchase_id (VARCHAR,UNI)  │
+│ - vendor_name (VARCHAR)      │
+│ - vendor_contact (VARCHAR)   │
+│ - vendor_email (VARCHAR)     │
+│ - billing_address (TEXT)     │
+│ - shipping_address (TEXT)    │
+│ - purchase_date (DATE)       │
+│ - total_amount (DECIMAL)     │
+│ - status (VARCHAR)           │
+│ - created_at (TIMESTAMP)     │
+└──────────────────────────────┘
+
+┌──────────────────────────────┐
+│    CONTRACTS TABLE           │
+├──────────────────────────────┤
+│ PK: id (UUID)                │
+│ - contract_id (VARCHAR,UNI)  │
+│ - name (VARCHAR)             │
+│ - vendor_name (VARCHAR)      │
+│ - active_from (DATE)         │
+│ - active_till (DATE)         │
+│ - status (ENUM)              │
+│ - notes (TEXT)               │
+│ - created_at (TIMESTAMP)     │
+└──────────────────────────────┘
+
+================================================================================
+COMPLETE RELATIONSHIP MAP
+================================================================================
+
+                              ┌─────────┐
+                              │ USERS   │
+                              │ (admin) │
+                              └────┬────┘
+                                   │
+                    ┌──────────────┼──────────────┐
+                    │              │              │
+             (assigned_to)   (user_id)      (user_id)
+                    │              │              │
+                    ▼              ▼              ▼
+         ┌─────────────────┐  ┌──────────┐  ┌──────────┐
+         │ ASSETS          │  │ AUDIT    │  │ HISTORY  │
+         │ (inventory)     │  │ LOGS     │  │ (track)  │
+         └────────┬────────┘  └──────────┘  └──────────┘
+                  │
+         (1:1) relationship
+                  │
+                  ▼
+         ┌──────────────────┐
+         │ ASSET_DETAILS    │
+         │ (tech specs)     │
+         └──────────────────┘
+
+
+         ┌────────────────┐        ┌────────────────┐
+         │ PURCHASES      │        │ CONTRACTS      │
+         │ (vendor info)  │        │ (agreements)   │
+         └────────────────┘        └────────────────┘
+                  ▲
+                  │
+           (purchase_id FK in ASSETS)
+
+================================================================================
+DATA FLOW
+================================================================================
+
+CREATE ASSET
+    │
+    ├─→ ASSETS table (main record)
+    │       ├─→ ASSET_DETAILS table (1:1 detail)
+    │       ├─→ AUDIT_LOGS table (track creation)
+    │       └─→ ASSET_HISTORY table (record movement)
+    │
+    ├─→ Link to PURCHASE (if applicable)
+    │
+    └─→ Assign to USER (if applicable)
+
+UPDATE ASSET
+    │
+    ├─→ Update ASSETS table
+    ├─→ Update ASSET_DETAILS (if tech specs changed)
+    ├─→ Create AUDIT_LOG entry (track change)
+    └─→ Create ASSET_HISTORY entry (record activity)
+
+DELETE/DISPOSE ASSET
+    │
+    ├─→ Set status to 'disposed' in ASSETS
+    ├─→ Create AUDIT_LOG entry
+    └─→ Create ASSET_HISTORY entry
+
+CREATE PURCHASE
+    │
+    └─→ PURCHASES table (vendor and amount info)
+            │
+            └─→ Link to ASSETS (via purchase_id FK)
+
+CREATE CONTRACT
+    │
+    └─→ CONTRACTS table (vendor agreement info)
+
+================================================================================
+ENUMERATED VALUES
+================================================================================
+
+ASSETS.category
+    ├─ IT
+    └─ Non-IT
+
+ASSETS.status
+    ├─ active
+    ├─ inactive
+    └─ disposed
+
+ASSETS.sub_type
+    ├─ Laptop
+    ├─ Desktop
+    ├─ Monitor
+    ├─ Printer
+    ├─ Router
+    ├─ Chair
+    ├─ Desk
+    ├─ Other (with other_subtype_description)
+    └─ ... (20+ types)
+
+USERS.role
+    ├─ admin (full access)
+    ├─ staff (read/write)
+    └─ viewer (read-only)
+
+CONTRACTS.status
+    ├─ active
+    ├─ expired
+    └─ upcoming
+
+PURCHASES.status
+    ├─ pending
+    ├─ ordered
+    ├─ delivered
+    └─ cancelled
+
+ASSET_HISTORY.action
+    ├─ created
+    ├─ updated
+    ├─ assigned
+    ├─ unassigned
+    ├─ repaired
+    └─ deactivated
+
+================================================================================
+KEY STATISTICS
+================================================================================
+
+Total Tables: 7
+    ├─ Core: ASSETS
+    ├─ Details: ASSET_DETAILS
+    ├─ Reference: PURCHASES, CONTRACTS
+    ├─ Users: USERS
+    └─ Audit: AUDIT_LOGS, ASSET_HISTORY
+
+Total Primary Keys: 7 (all UUID)
+Total Foreign Keys: 10
+Total Relationships: 7 (1-to-1, 1-to-Many)
+
+Typical Data Volume (expected):
+    ├─ USERS: 5-20 records
+    ├─ ASSETS: 500-5000 records
+    ├─ ASSET_DETAILS: 500-5000 records (same as assets)
+    ├─ PURCHASES: 100-1000 records
+    ├─ CONTRACTS: 10-100 records
+    ├─ AUDIT_LOGS: 5000-50000 records
+    └─ ASSET_HISTORY: 5000-50000 records
+
+================================================================================
+TYPICAL QUERIES
+================================================================================
+
+# Get all assets for a user
+SELECT * FROM assets WHERE assigned_to = $userId
+
+# Get asset with all details
+SELECT a.*, ad.* FROM assets a
+LEFT JOIN asset_details ad ON a.id = ad.asset_id
+WHERE a.id = $assetId
+
+# Get asset audit trail
+SELECT * FROM audit_logs WHERE asset_id = $assetId ORDER BY changed_at DESC
+
+# Get all assets purchased from vendor
+SELECT a.* FROM assets a
+JOIN purchases p ON a.purchase_id = p.id
+WHERE p.vendor_name = $vendorName
+
+# Get active contracts
+SELECT * FROM contracts WHERE status = 'active'
+
+# Get assets with warranty expiring soon
+SELECT a.*, ad.* FROM assets a
+JOIN asset_details ad ON a.id = ad.asset_id
+WHERE ad.warranty_expiry BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+
+# Get assets assigned by user
+SELECT * FROM assets WHERE assigned_to = $userId AND status = 'active'
+
+================================================================================
+CONSTRAINTS & VALIDATIONS
+================================================================================
+
+ASSETS:
+    ✓ asset_tag: UNIQUE, NOT NULL
+    ✓ category: NOT NULL, ENUM check
+    ✓ status: NOT NULL, ENUM check
+    ✓ purchase_id: Foreign key reference
+    ✓ assigned_to: Foreign key reference
+
+PURCHASES:
+    ✓ purchase_id: UNIQUE, NOT NULL
+    ✓ vendor_name: NOT NULL
+    ✓ vendor_email: Email format validation
+    ✓ purchase_date: NOT NULL
+    ✓ total_amount: NOT NULL, positive decimal
+
+CONTRACTS:
+    ✓ contract_id: UNIQUE, NOT NULL
+    ✓ active_from: NOT NULL, DATE format
+    ✓ active_till: NOT NULL, DATE format
+    ✓ Status: ENUM validation (active/expired/upcoming)
+
+USERS:
+    ✓ email: UNIQUE, NOT NULL, Email format
+    ✓ password_hash: NOT NULL
+    ✓ role: ENUM validation (admin/staff/viewer)
+
+ASSET_DETAILS:
+    ✓ asset_id: UNIQUE, Foreign key, NOT NULL
+    ✓ cores: INTEGER check (> 0)
+    ✓ ram_gb: FLOAT check (> 0)
+    ✓ disk_gb: FLOAT check (> 0)
+
+================================================================================
+MIGRATION STRATEGY
+================================================================================
+
+Migration File: 20240602_add_asset_fields.js
+
+Creates tables in order:
+    1. Users (no dependencies)
+    2. Purchases (no dependencies)
+    3. Contracts (no dependencies)
+    4. Assets (depends on users, purchases)
+    5. Asset_Details (depends on assets)
+    6. Audit_Logs (depends on assets, users)
+    7. Asset_History (depends on assets, users)
+
+Rollback removes in reverse order
+
+================================================================================
+BACKUP & RECOVERY
+================================================================================
+
+Important tables to backup:
+    ✓ ASSETS - Core inventory data
+    ✓ ASSET_DETAILS - Technical specifications
+    ✓ AUDIT_LOGS - Change tracking (compliance)
+    ✓ ASSET_HISTORY - Movement history
+
+Recommended backup frequency:
+    - Daily incremental
+    - Weekly full backup
+    - Monthly archive
+
+Recovery Point Objective (RPO): 24 hours
+Recovery Time Objective (RTO): 4 hours
+
+================================================================================
+PERFORMANCE OPTIMIZATION
+================================================================================
+
+Recommended Indexes:
+    ✓ assets(asset_tag) - fast lookup by tag
+    ✓ assets(status) - filter by status
+    ✓ assets(assigned_to) - user's assets
+    ✓ assets(purchase_id) - related purchases
+    ✓ audit_logs(asset_id) - asset history
+    ✓ audit_logs(user_id) - user activity
+    ✓ users(email) - authentication
+
+Query Optimization:
+    ✓ Use prepared statements
+    ✓ Limit audit logs to recent 1 year
+    ✓ Archive old history records
+    ✓ Use pagination for large result sets
+
+================================================================================

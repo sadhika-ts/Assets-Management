@@ -12,13 +12,33 @@ module.exports = (sequelize) => {
       unique: true,
       allowNull: false
     },
-    name: {
+    contract_name: {
       type: DataTypes.STRING,
       allowNull: false
     },
     vendor_name: {
       type: DataTypes.STRING,
       allowNull: false
+    },
+    vendor_contact: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    vendor_email: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    vendor_phone: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    vendor_address: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    vendor_contact_person: {
+      type: DataTypes.STRING,
+      allowNull: true
     },
     active_from: {
       type: DataTypes.DATE,
@@ -28,12 +48,21 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: false
     },
+    contract_value: {
+      type: DataTypes.DECIMAL(12, 2),
+      defaultValue: 0,
+      allowNull: false
+    },
     status: {
-      type: DataTypes.ENUM('active', 'expired', 'upcoming'),
+      type: DataTypes.ENUM('active', 'expired', 'upcoming', 'expiring_soon'),
       defaultValue: 'upcoming',
       allowNull: false
     },
     notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    description: {
       type: DataTypes.TEXT,
       allowNull: true
     },

@@ -64,6 +64,14 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    other_applications_installed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    other_applications_description: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     software_list: {
       type: DataTypes.TEXT,
       allowNull: true

@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 
 export const Sidebar = () => {
   const [collapsed, setCollapsed] = useState(window.innerWidth < 768);
   const location = useLocation();
-  const { user, logout } = useAuth();
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -15,25 +13,8 @@ export const Sidebar = () => {
     { path: '/reports', label: 'Reports', icon: '📈' }
   ];
 
-  if (user?.role === 'admin') {
-    navItems.push({ path: '/users', label: 'Users', icon: '👥' });
-  }
-
   const isActive = (path) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
-  };
-
-  const getRoleBadgeColor = (role) => {
-    switch (role) {
-      case 'admin':
-        return 'bg-red-100 text-red-800';
-      case 'staff':
-        return 'bg-blue-100 text-blue-800';
-      case 'viewer':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
   };
 
   return (
@@ -78,28 +59,11 @@ export const Sidebar = () => {
         ))}
       </nav>
 
-      {/* User Info */}
-      <div className="border-t border-gray-200 p-3 space-y-3">
+      {/* Footer */}
+      <div className="border-t border-gray-200 p-3">
         {!collapsed && (
-          <div>
-            <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
-            <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-          </div>
+          <p className="text-xs text-gray-600 text-center">No authentication required</p>
         )}
-
-        {!collapsed && (
-          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(user?.role)}`}>
-            {user?.role}
-          </span>
-        )}
-
-        <button
-          onClick={logout}
-          className="w-full px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          title="Logout"
-        >
-          {collapsed ? '🚪' : 'Logout'}
-        </button>
       </div>
     </div>
   );

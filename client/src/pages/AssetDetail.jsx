@@ -284,6 +284,9 @@ export const AssetDetail = () => {
           <InfoRow label="Asset Tag" value={asset.asset_tag} copyable />
           <InfoRow label="Category" value={asset.category} />
           <InfoRow label="Sub Type" value={asset.sub_type} />
+          {asset.other_subtype_description && (
+            <InfoRow label="Other Subtype Description" value={asset.other_subtype_description} />
+          )}
           <InfoRow label="Serial Number" value={asset.detail?.serial_no} copyable />
           <InfoRow label="MAC Address" value={asset.detail?.mac_address} copyable />
 
@@ -331,10 +334,17 @@ export const AssetDetail = () => {
             <div className="border-b border-gray-100 py-3 last:border-b-0 space-y-2">
               <BooleanBadge value={asset.detail.os_activated} label="OS Activated" />
               <BooleanBadge value={asset.detail.ms_office} label="MS Office Installed" />
+              {asset.detail.other_applications_installed && (
+                <BooleanBadge value={asset.detail.other_applications_installed} label="Other Applications Installed" />
+              )}
             </div>
 
             {asset.detail.office_key && (
               <InfoRow label="Office Key" value={asset.detail.office_key} copyable />
+            )}
+
+            {asset.detail.other_applications_description && (
+              <InfoRow label="Other Applications Description" value={asset.detail.other_applications_description} />
             )}
           </div>
         )}

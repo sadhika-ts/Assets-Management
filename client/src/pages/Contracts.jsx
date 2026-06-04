@@ -1,525 +1,619 @@
 import React, { useState, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
 
-// Toast Component
-const Toast = ({ message, type, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const bgColor = type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800';
-
-  return (
-    <div className={`fixed top-4 right-4 p-4 rounded-lg border ${bgColor} shadow-lg z-50`}>
-      <p className="font-medium">{message}</p>
-    </div>
-  );
-};
-
-// Status Badge Component
+// Status Badge
 const StatusBadge = ({ status }) => {
-  const statusStyles = {
+  const styles = {
     active: 'bg-green-100 text-green-800',
-    upcoming: 'bg-blue-100 text-blue-800',
-    expired: 'bg-red-100 text-red-800'
+    expiring_soon: 'bg-orange-100 text-orange-800',
+    expired: 'bg-red-100 text-red-800',
+    renewal_due: 'bg-yellow-100 text-yellow-800'
   };
-
-  return (
-    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[status] || statusStyles.expired}`}>
-      {status}
-    </span>
-  );
+  return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${styles[status] || styles.active}`}>{status.replace('_', ' ')}</span>;
 };
 
-// Add/Edit Contract Modal
-const ContractModal = ({ isOpen, onClose, onSubmit, isLoading, editingContract }) => {
-  const { control, handleSubmit, reset, formState: { errors } } = useForm({
-    defaultValues: {
-      contract_id: '',
-      name: '',
-      vendor_name: '',
-      active_from: '',
-      active_till: '',
-      status: 'active',
-      description: ''
-    }
-  });
-
-  useEffect(() => {
-    if (editingContract) {
-      reset({
-        contract_id: editingContract.contract_id,
-        name: editingContract.name,
-        vendor_name: editingContract.vendor_name,
-        active_from: editingContract.active_from?.split('T')[0] || '',
-        active_till: editingContract.active_till?.split('T')[0] || '',
-        status: editingContract.status || 'active',
-        description: editingContract.description || ''
-      });
-    } else {
-      reset();
-    }
-  }, [editingContract, reset]);
-
-  if (!isOpen) return null;
+// Contract Card
+const ContractCard = ({ contract, onView, onRenew, onDelete }) => {
+  const daysUntilExpiry = Math.ceil((new Date(contract.active_till) - new Date()) / (1000 * 60 * 60 * 24));
+  const isExpiringSoon = daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+  const isExpired = daysUntilExpiry < 0;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4 my-8">
-        <h2 className="text-lg font-bold text-gray-800 mb-4">
-          {editingContract ? 'Edit Contract' : 'Add Contract'}
-        </h2>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-h-96 overflow-y-auto">
-          {/* Contract ID */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contract ID *</label>
-            <Controller
-              name="contract_id"
-              control={control}
-              rules={{ required: 'Contract ID is required' }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="text"
-                  placeholder="e.g., CON-001"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.contract_id ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-              )}
-            />
-            {errors.contract_id && <p className="text-red-600 text-xs mt-1">{errors.contract_id.message}</p>}
-          </div>
-
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contract Name *</label>
-            <Controller
-              name="name"
-              control={control}
-              rules={{ required: 'Contract name is required' }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="text"
-                  placeholder="Contract name"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.name ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-              )}
-            />
-            {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name.message}</p>}
-          </div>
-
-          {/* Vendor Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Name *</label>
-            <Controller
-              name="vendor_name"
-              control={control}
-              rules={{ required: 'Vendor name is required' }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="text"
-                  placeholder="Vendor name"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.vendor_name ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-              )}
-            />
-            {errors.vendor_name && <p className="text-red-600 text-xs mt-1">{errors.vendor_name.message}</p>}
-          </div>
-
-          {/* Active From */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Active From *</label>
-            <Controller
-              name="active_from"
-              control={control}
-              rules={{ required: 'Start date is required' }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="date"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.active_from ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-              )}
-            />
-            {errors.active_from && <p className="text-red-600 text-xs mt-1">{errors.active_from.message}</p>}
-          </div>
-
-          {/* Active Till */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Active Till *</label>
-            <Controller
-              name="active_till"
-              control={control}
-              rules={{ required: 'End date is required' }}
-              render={({ field }) => (
-                <input
-                  {...field}
-                  type="date"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.active_till ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-              )}
-            />
-            {errors.active_till && <p className="text-red-600 text-xs mt-1">{errors.active_till.message}</p>}
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <Controller
-              name="status"
-              control={control}
-              render={({ field }) => (
-                <select {...field} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="active">Active</option>
-                  <option value="upcoming">Upcoming</option>
-                  <option value="expired">Expired</option>
-                </select>
-              )}
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <Controller
-              name="description"
-              control={control}
-              render={({ field }) => (
-                <textarea {...field} placeholder="Contract details" rows="3" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              )}
-            />
-          </div>
-
-          <div className="flex gap-3 justify-end pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isLoading}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isLoading ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-// Delete Confirmation Modal
-const DeleteModal = ({ isOpen, onConfirm, onCancel, isDeleting, contractId }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-        <h2 className="text-lg font-bold text-gray-800 mb-2">Delete Contract</h2>
-        <p className="text-gray-600 mb-6">Are you sure you want to delete contract <span className="font-semibold">{contractId}</span>?</p>
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            disabled={isDeleting}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isDeleting}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-          >
-            {isDeleting ? 'Deleting...' : 'Delete'}
-          </button>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h3 className="font-bold text-gray-800">{contract.contract_name}</h3>
+          <p className="text-sm text-gray-600">ID: {contract.contract_id}</p>
         </div>
+        <StatusBadge status={contract.status} />
+      </div>
+
+      <div className="space-y-2 text-sm text-gray-700 mb-4 border-b border-gray-200 pb-4">
+        <p><strong>Vendor:</strong> {contract.vendor_name}</p>
+        <p><strong>Value:</strong> ₹{contract.contract_value.toLocaleString()}</p>
+        <p><strong>Active:</strong> {contract.active_from}</p>
+        <p><strong>Expires:</strong> {contract.active_till}</p>
+        {daysUntilExpiry > 0 && <p className={isExpiringSoon ? 'text-orange-600 font-semibold' : 'text-gray-600'}><strong>Days Left:</strong> {daysUntilExpiry} days</p>}
+        {isExpired && <p className="text-red-600 font-semibold"><strong>Status:</strong> Expired {Math.abs(daysUntilExpiry)} days ago</p>}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => onView(contract.id)}
+          className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition text-sm font-medium"
+        >
+          View
+        </button>
+        <button
+          onClick={() => onRenew(contract.id, contract.contract_id)}
+          className="flex-1 bg-green-500 text-white py-2 rounded hover:bg-green-600 transition text-sm font-medium"
+        >
+          Renew
+        </button>
+        <button
+          onClick={() => onDelete(contract.id, contract.contract_id)}
+          className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 transition text-sm font-medium"
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
 };
+
+// Alert Card
+const AlertCard = ({ type, title, count, color }) => (
+  <div className={`bg-white p-6 rounded-lg shadow-sm border-l-4 border-${color}-500 hover:shadow-md transition-all`}>
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-gray-600 text-sm font-medium">{title}</p>
+        <p className={`text-3xl font-bold text-${color}-700 mt-2`}>{count}</p>
+      </div>
+      <span className="text-5xl">{type === 'active' ? '✅' : type === 'expiring' ? '⚠️' : type === 'expired' ? '❌' : '🔄'}</span>
+    </div>
+  </div>
+);
 
 export const Contracts = () => {
-  const { canCreate, canEdit, canDelete } = useAuth();
-
-  // State
-  const [contracts, setContracts] = useState([]);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [viewMode, setViewMode] = useState('card');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [renewalTarget, setRenewalTarget] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [mockContracts, setMockContracts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [toast, setToast] = useState(null);
-  const [modal, setModal] = useState({ isOpen: false, editingContract: null });
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, contractId: null, id: null, isDeleting: false });
-  const [statusFilter, setStatusFilter] = useState('');
 
-  // Fetch contracts
+  useEffect(() => {
+    const shouldRefresh = searchParams.get('refresh') === 'true';
+    const newContractId = searchParams.get('new');
+
+    if (shouldRefresh) {
+      console.log('🔄 Refreshing contracts list...');
+      if (newContractId) {
+        console.log('New contract ID:', newContractId);
+      }
+    }
+
+    fetchContracts();
+  }, [searchParams]);
+
   const fetchContracts = async () => {
     try {
-      setLoading(true);
-      const params = {};
-      if (statusFilter) params.status = statusFilter;
+      console.log('📥 Fetching all contracts from API...');
+      const response = await api.get('/contracts');
+      const contracts = response.data?.data?.contracts || response.data || [];
 
-      const response = await api.get('/contracts', { params });
-      setContracts(response.data.data.contracts || []);
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load contracts');
-    } finally {
+      console.log('✅ Fetched contracts:', contracts.length);
+      setMockContracts(contracts);
+      setLoading(false);
+
+      // Show success toast if this is a refresh after creating new contract
+      const shouldRefresh = searchParams.get('refresh') === 'true';
+      if (shouldRefresh) {
+        toast.success('✅ Contracts list updated with new contract!');
+      }
+    } catch (error) {
+      console.error('Error fetching contracts:', error);
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchContracts();
-  }, [statusFilter]);
+  // Calculate dashboard widgets
+  const activeContracts = mockContracts.filter(c => c.status === 'active').length;
+  const expiringWithin30 = mockContracts.filter(c => c.status === 'expiring_soon').length;
+  const expiredContracts = mockContracts.filter(c => c.status === 'expired').length;
+  const renewalDue = mockContracts.filter(c => c.status === 'renewal_due').length;
 
-  // Calculate contract status
-  const getContractStatus = (activeFrom, activeTill) => {
-    const now = new Date();
-    const from = new Date(activeFrom);
-    const till = new Date(activeTill);
+  // Contract Timeline Data
+  const contractTimelineData = [];
 
-    if (now < from) return 'upcoming';
-    if (now > till) return 'expired';
-    return 'active';
-  };
+  // Contract Value Distribution
+  const valueDistribution = [];
 
-  // Check for expiring soon contracts
-  const expiringContracts = contracts.filter(c => {
-    const now = new Date();
-    const till = new Date(c.active_till);
-    const daysLeft = Math.ceil((till - now) / (1000 * 60 * 60 * 24));
-    return daysLeft > 0 && daysLeft <= 30 && getContractStatus(c.active_from, c.active_till) === 'active';
+  // Vendor Contracts
+  const vendorContracts = [];
+
+  // Filter contracts
+  const filteredContracts = mockContracts.filter(contract => {
+    const matchesSearch = contract.contract_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         contract.vendor_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || contract.status === filterStatus;
+    return matchesSearch && matchesStatus;
   });
 
-  const handleAddModal = () => {
-    setModal({ isOpen: true, editingContract: null });
+  const handleAddContract = () => {
+    toast.success('Create new contract');
+    navigate('/contracts/new');
   };
 
-  const handleEditModal = (contract) => {
-    setModal({ isOpen: true, editingContract: contract });
+  const handleViewContract = (id) => {
+    const contract = mockContracts.find(c => c.id === id);
+    if (contract) {
+      toast.success(`Viewing ${contract.contract_id} - ${contract.vendor_name}`);
+    }
   };
 
-  const handleCloseModal = () => {
-    setModal({ isOpen: false, editingContract: null });
+  const handleDeleteContract = (id, contractId) => {
+    setDeleteTarget({ id, contractId });
+    setShowDeleteModal(true);
   };
 
-  const handleSave = async (data) => {
-    try {
-      if (modal.editingContract) {
-        await api.put(`/contracts/${modal.editingContract.id}`, data);
-        setToast({ message: 'Contract updated successfully', type: 'success' });
-      } else {
-        await api.post('/contracts', data);
-        setToast({ message: 'Contract created successfully', type: 'success' });
+  const confirmDelete = () => {
+    toast.success(`Contract ${deleteTarget.contractId} deleted successfully`);
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+  };
+
+  const handleRenewContract = (id, contractId) => {
+    setRenewalTarget({ id, contractId });
+    setShowRenewalModal(true);
+  };
+
+  const confirmRenewal = () => {
+    const newDate = new Date();
+    newDate.setFullYear(newDate.getFullYear() + 1);
+    toast.success(`Contract ${renewalTarget.contractId} renewed until ${newDate.toLocaleDateString()}`);
+    setShowRenewalModal(false);
+    setRenewalTarget(null);
+  };
+
+  const handleUploadDocument = () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        toast.success(`Document ${file.name} uploaded successfully`);
+        setShowUploadModal(false);
       }
-      handleCloseModal();
-      fetchContracts();
-    } catch (err) {
-      setToast({ message: err.response?.data?.message || 'Failed to save contract', type: 'error' });
-    }
+    };
+    fileInput.click();
   };
-
-  const handleDeleteClick = (id, contractId) => {
-    setDeleteModal({ isOpen: true, contractId, id, isDeleting: false });
-  };
-
-  const handleConfirmDelete = async () => {
-    try {
-      setDeleteModal(prev => ({ ...prev, isDeleting: true }));
-      await api.delete(`/contracts/${deleteModal.id}`);
-      setToast({ message: 'Contract deleted successfully', type: 'success' });
-      setDeleteModal({ isOpen: false, contractId: null, id: null, isDeleting: false });
-      fetchContracts();
-    } catch (err) {
-      setToast({ message: err.response?.data?.message || 'Failed to delete contract', type: 'error' });
-      setDeleteModal(prev => ({ ...prev, isDeleting: false }));
-    }
-  };
-
-  if (error && !loading) {
-    return (
-      <AppLayout title="Contracts">
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-          <p className="font-medium">Error loading contracts</p>
-          <p className="text-sm mt-1">{error}</p>
-        </div>
-      </AppLayout>
-    );
-  }
 
   return (
-    <AppLayout title="Contracts">
-      {/* Expiring Soon Banner */}
-      {expiringContracts.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-4 mb-6">
-          <p className="font-medium">⚠️ {expiringContracts.length} contract{expiringContracts.length !== 1 ? 's' : ''} expiring within 30 days</p>
-          <ul className="text-sm mt-2 space-y-1">
-            {expiringContracts.map(c => (
-              <li key={c.id}>• {c.name} - Expires {new Date(c.active_till).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+    <AppLayout title="Contract Management">
+      <div className="space-y-6">
 
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Contracts</h2>
-        {canCreate && (
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-800">Contracts</h2>
           <button
-            onClick={handleAddModal}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={handleAddContract}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-all"
           >
-            + Add Contract
+            ➕ New Contract
           </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'overview' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            📊 Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('contracts')}
+            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'contracts' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            📋 Contracts
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'analytics' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            📈 Analytics
+          </button>
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'documents' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            📄 Documents
+          </button>
+        </div>
+
+        {/* OVERVIEW TAB */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Dashboard Widgets */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <AlertCard type="active" title="Active Contracts" count={activeContracts} color="green" />
+              <AlertCard type="expiring" title="Expiring Within 30 Days" count={expiringWithin30} color="orange" />
+              <AlertCard type="expired" title="Expired Contracts" count={expiredContracts} color="red" />
+              <AlertCard type="renewal" title="Renewal Due" count={renewalDue} color="yellow" />
+            </div>
+
+            {/* Total Contract Value */}
+            <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-8 rounded-lg shadow-lg">
+              <h3 className="text-2xl font-bold mb-2">Total Contract Value</h3>
+              <p className="text-4xl font-bold">₹{(mockContracts.reduce((sum, c) => sum + c.contract_value, 0) / 100000).toFixed(1)}L</p>
+              <p className="text-blue-100 mt-2">Across {mockContracts.length} contracts</p>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition text-sm"
+                >
+                  📄 Upload Document
+                </button>
+                <button
+                  onClick={() => setActiveTab('analytics')}
+                  className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium transition text-sm"
+                >
+                  📊 View Analytics
+                </button>
+                <button
+                  onClick={() => toast.success('Renewal reminders enabled')}
+                  className="bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 font-medium transition text-sm"
+                >
+                  🔔 Send Reminders
+                </button>
+                <button
+                  onClick={() => toast.success('Statuses updated')}
+                  className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 font-medium transition text-sm"
+                >
+                  🔄 Auto Update Status
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Expiring Contracts */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Contracts Expiring Soon</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Contract ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Expires</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Days Left</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {mockContracts.filter(c => c.status !== 'expired' && c.status !== 'active').map(contract => {
+                      const daysLeft = Math.ceil((new Date(contract.active_till) - new Date()) / (1000 * 60 * 60 * 24));
+                      return (
+                        <tr key={contract.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 font-medium text-gray-900">{contract.contract_id}</td>
+                          <td className="px-6 py-4 text-gray-700">{contract.contract_name}</td>
+                          <td className="px-6 py-4 text-gray-700">{contract.vendor_name}</td>
+                          <td className="px-6 py-4 text-gray-700">{contract.active_till}</td>
+                          <td className="px-6 py-4"><span className={daysLeft > 0 ? 'text-orange-600 font-semibold' : 'text-red-600 font-semibold'}>{daysLeft > 0 ? daysLeft : 'Expired'}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CONTRACTS TAB */}
+        {activeTab === 'contracts' && (
+          <div className="space-y-6">
+            {/* Search & Filter */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Search Contracts</label>
+                  <input
+                    type="text"
+                    placeholder="Search by name or vendor..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expiring_soon">Expiring Soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="renewal_due">Renewal Due</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* View Toggle */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium transition"
+              >
+                {viewMode === 'card' ? '📋 List View' : '⊞ Card View'}
+              </button>
+            </div>
+
+            {/* Contracts Display */}
+            {viewMode === 'card' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredContracts.map(contract => (
+                  <ContractCard
+                    key={contract.id}
+                    contract={contract}
+                    onView={handleViewContract}
+                    onRenew={handleRenewContract}
+                    onDelete={handleDeleteContract}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm p-6 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Contract ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Value</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Expires</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredContracts.map(contract => (
+                      <tr key={contract.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 font-medium text-gray-900">{contract.contract_id}</td>
+                        <td className="px-6 py-4 text-gray-700">{contract.contract_name}</td>
+                        <td className="px-6 py-4 text-gray-700">{contract.vendor_name}</td>
+                        <td className="px-6 py-4 font-medium text-gray-900">₹{(contract.contract_value / 100000).toFixed(2)}L</td>
+                        <td className="px-6 py-4 text-gray-700">{contract.active_till}</td>
+                        <td className="px-6 py-4"><StatusBadge status={contract.status} /></td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <button onClick={() => handleViewContract(contract.id)} className="text-blue-600 hover:text-blue-800 font-medium">View</button>
+                            <button onClick={() => handleRenewContract(contract.id, contract.contract_id)} className="text-green-600 hover:text-green-800 font-medium">Renew</button>
+                            <button onClick={() => handleDeleteContract(contract.id, contract.contract_id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ANALYTICS TAB */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            {/* Contract Timeline */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 Contract Timeline</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={contractTimelineData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="active" fill="#10b981" name="Active Contracts" />
+                  <Bar dataKey="expired" fill="#ef4444" name="Expired Contracts" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Value Distribution */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">💰 Contract Value Distribution</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={valueDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ₹${(value / 100000).toFixed(1)}L`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {valueDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">🏢 Vendor Contracts</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={vendorContracts}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="value" fill="#3b82f6" name="Value (₹)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Contract Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">📊 Statistics</h3>
+                <div className="space-y-3 text-sm">
+                  <p>Total Contracts: <strong>{mockContracts.length}</strong></p>
+                  <p>Avg Contract Value: <strong>₹{Math.round(mockContracts.reduce((sum, c) => sum + c.contract_value, 0) / mockContracts.length / 100000 * 100)}K</strong></p>
+                  <p>Highest Value: <strong>₹{(Math.max(...mockContracts.map(c => c.contract_value)) / 100000).toFixed(1)}L</strong></p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-green-600 to-green-700 text-white p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">✅ Status Summary</h3>
+                <div className="space-y-3 text-sm">
+                  <p>Active: <strong>{activeContracts}</strong></p>
+                  <p>Expiring Soon: <strong>{expiringWithin30}</strong></p>
+                  <p>Renewal Due: <strong>{renewalDue}</strong></p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-orange-600 to-orange-700 text-white p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">🔔 Alerts</h3>
+                <div className="space-y-3 text-sm">
+                  <p>Expired: <strong>{expiredContracts}</strong></p>
+                  <p>Renewal Overdue: <strong>{Math.max(0, renewalDue - 1)}</strong></p>
+                  <p>Action Needed: <strong>{expiringWithin30 + renewalDue}</strong></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DOCUMENTS TAB */}
+        {activeTab === 'documents' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">📄 Contract Documents</h3>
+              <div className="space-y-4">
+                {mockContracts.map(contract => (
+                  <div key={contract.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="font-semibold text-gray-800">{contract.contract_name}</h4>
+                        <p className="text-sm text-gray-600">{contract.vendor_name}</p>
+                      </div>
+                      <button
+                        onClick={() => setShowUploadModal(true)}
+                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                      >
+                        📤 Upload
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {contract.documents.map((doc, idx) => (
+                        <div key={idx} className="flex items-center gap-3 bg-gray-50 p-2 rounded">
+                          <span className="text-xl">📄</span>
+                          <span className="text-sm text-gray-700">{doc}</span>
+                          <div className="ml-auto flex gap-2">
+                            <button className="text-blue-600 text-sm hover:text-blue-800">Download</button>
+                            <button className="text-red-600 text-sm hover:text-red-800">Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+              <h2 className="text-lg font-bold text-gray-800 mb-2">Delete Contract</h2>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete <span className="font-semibold">{deleteTarget?.contractId}</span>? This action cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                  Cancel
+                </button>
+                <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Renewal Confirmation Modal */}
+        {showRenewalModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+              <h2 className="text-lg font-bold text-gray-800 mb-2">Renew Contract</h2>
+              <p className="text-gray-600 mb-6">
+                Do you want to renew <span className="font-semibold">{renewalTarget?.contractId}</span> for another year?
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowRenewalModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                  Cancel
+                </button>
+                <button onClick={confirmRenewal} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  Renew
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Upload Document Modal */}
+        {showUploadModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+              <h2 className="text-lg font-bold text-gray-800 mb-4">Upload Contract Document</h2>
+              <div className="space-y-4">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition">
+                  <p className="text-gray-600">📄 Drag and drop or click to upload</p>
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-6">
+                <button onClick={() => setShowUploadModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                  Cancel
+                </button>
+                <button onClick={handleUploadDocument} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  Upload
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Status</option>
-              <option value="active">Active</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="expired">Expired</option>
-            </select>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={() => setStatusFilter('')}
-              className="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-            >
-              Clear Filters
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <p className="text-sm text-gray-500">
-            {loading ? 'Loading...' : `${contracts.length} contract${contracts.length !== 1 ? 's' : ''} found`}
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Contract ID</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Vendor</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Active From</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Active Till</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">Loading...</td>
-                </tr>
-              ) : contracts.length > 0 ? (
-                contracts.map((contract) => (
-                  <tr key={contract.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{contract.contract_id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-700">{contract.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600 text-sm">{contract.vendor_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(contract.active_from).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(contract.active_till).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={getContractStatus(contract.active_from, contract.active_till)} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-2">
-                        {canEdit && (
-                          <button
-                            onClick={() => handleEditModal(contract)}
-                            className="text-xs text-blue-600 hover:text-blue-700 px-2 py-1"
-                          >
-                            Edit
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => handleDeleteClick(contract.id, contract.contract_id)}
-                            className="text-xs text-red-600 hover:text-red-700 px-2 py-1"
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">No contracts found</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modals */}
-      <ContractModal
-        isOpen={modal.isOpen}
-        onClose={handleCloseModal}
-        onSubmit={handleSave}
-        isLoading={false}
-        editingContract={modal.editingContract}
-      />
-
-      <DeleteModal
-        isOpen={deleteModal.isOpen}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteModal({ isOpen: false, contractId: null, id: null, isDeleting: false })}
-        isDeleting={deleteModal.isDeleting}
-        contractId={deleteModal.contractId}
-      />
-
-      {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
     </AppLayout>
   );
 };

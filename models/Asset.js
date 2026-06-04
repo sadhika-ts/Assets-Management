@@ -12,6 +12,10 @@ module.exports = (sequelize) => {
       unique: true,
       allowNull: false
     },
+    asset_name: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
     category: {
       type: DataTypes.ENUM('IT', 'Non-IT'),
       allowNull: false
@@ -19,6 +23,10 @@ module.exports = (sequelize) => {
     sub_type: {
       type: DataTypes.STRING,
       allowNull: false
+    },
+    other_subtype_description: {
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     serial_no: {
       type: DataTypes.STRING,
@@ -42,12 +50,8 @@ module.exports = (sequelize) => {
       }
     },
     assigned_to: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
+      type: DataTypes.STRING,
+      allowNull: true
     },
     created_at: {
       type: DataTypes.DATE,
@@ -61,7 +65,6 @@ module.exports = (sequelize) => {
 
   Asset.associate = (models) => {
     Asset.belongsTo(models.Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
-    Asset.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     Asset.hasOne(models.AssetDetail, { foreignKey: 'asset_id', as: 'detail' });
     Asset.hasMany(models.AuditLog, { foreignKey: 'asset_id', as: 'auditLogs' });
   };

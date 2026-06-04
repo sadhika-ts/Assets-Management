@@ -27,6 +27,10 @@ module.exports = (sequelize) => {
         isEmail: true
       }
     },
+    vendor_address: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     billing_address: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -39,14 +43,28 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: false
     },
+    invoice_number: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    payment_method: {
+      type: DataTypes.STRING,
+      defaultValue: 'Bank Transfer',
+      allowNull: true
+    },
     total_amount: {
       type: DataTypes.DECIMAL(12, 2),
+      defaultValue: 0,
       allowNull: false
     },
     status: {
       type: DataTypes.STRING,
       defaultValue: 'pending',
       allowNull: false
+    },
+    notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     created_at: {
       type: DataTypes.DATE,
