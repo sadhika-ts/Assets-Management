@@ -292,37 +292,6 @@ export const Contracts = () => {
               <p className="text-blue-100 mt-2">Across {mockContracts.length} contracts</p>
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition text-sm"
-                >
-                  📄 Upload Document
-                </button>
-                <button
-                  onClick={() => setActiveTab('analytics')}
-                  className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium transition text-sm"
-                >
-                  📊 View Analytics
-                </button>
-                <button
-                  onClick={() => toast.success('Renewal reminders enabled')}
-                  className="bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 font-medium transition text-sm"
-                >
-                  🔔 Send Reminders
-                </button>
-                <button
-                  onClick={() => toast.success('Statuses updated')}
-                  className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 font-medium transition text-sm"
-                >
-                  🔄 Auto Update Status
-                </button>
-              </div>
-            </div>
-
             {/* Recent Expiring Contracts */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Contracts Expiring Soon</h3>
