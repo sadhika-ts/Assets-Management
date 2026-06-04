@@ -1,566 +1,700 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '../layouts/AppLayout';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import toast from 'react-hot-toast';
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
 import api from '../api/axios';
 
-// Report Card Component
-const ReportCard = ({ title, icon, count, description, onGenerate }) => (
-  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all">
-    <div className="flex items-start justify-between mb-4">
+const COLORS = ['#3b82f6','#22c55e','#f97316','#ef4444','#a855f7','#06b6d4','#eab308','#ec4899'];
+
+const fmt = (n) => (parseFloat(n) || 0).toLocaleString('en-IN');
+const fmtL = (n) => {
+  const v = parseFloat(n) || 0;
+  return v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : `₹${v.toLocaleString('en-IN')}`;
+};
+
+// ── KPI Card ──────────────────────────────────────────────────────────────────
+const KPI = ({ label, value, sub, color = 'blue', icon }) => (
+  <div className={`bg-white rounded-lg shadow-sm border-l-4 border-${color}-500 p-5`}>
+    <div className="flex justify-between items-start">
       <div>
-        <h3 className="font-bold text-gray-800">{title}</h3>
-        <p className="text-sm text-gray-600 mt-2">{description}</p>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+        <p className={`text-3xl font-bold text-${color}-600 mt-1`}>{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
       </div>
-      <span className="text-4xl">{icon}</span>
+      <span className="text-3xl">{icon}</span>
     </div>
-    <div className="text-2xl font-bold text-blue-600 mb-4">{count}</div>
-    <button
-      onClick={onGenerate}
-      className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition text-sm font-medium"
-    >
-      Generate Report
-    </button>
   </div>
 );
 
-// Export Options Modal
-const ExportModal = ({ isOpen, onClose, reportName, onExport }) => {
-  if (!isOpen) return null;
+// ── Empty State ───────────────────────────────────────────────────────────────
+const Empty = ({ msg = 'No data available for selected filters.' }) => (
+  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+    <span className="text-5xl mb-3">📭</span>
+    <p className="text-sm">{msg}</p>
+  </div>
+);
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-        <h2 className="text-lg font-bold text-gray-800 mb-4">Export {reportName}</h2>
-        <div className="space-y-3 mb-6">
-          <button
-            onClick={() => onExport('pdf')}
-            className="w-full bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 font-medium transition flex items-center gap-2"
-          >
-            <span>📄</span> Export as PDF
-          </button>
-          <button
-            onClick={() => onExport('excel')}
-            className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium transition flex items-center gap-2"
-          >
-            <span>📊</span> Export as Excel
-          </button>
-          <button
-            onClick={() => onExport('csv')}
-            className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition flex items-center gap-2"
-          >
-            <span>📋</span> Export as CSV
-          </button>
-        </div>
-        <button
-          onClick={onClose}
-          className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
+// ── Section Wrapper ───────────────────────────────────────────────────────────
+const Card = ({ title, children, className = '' }) => (
+  <div className={`bg-white rounded-lg shadow-sm p-6 ${className}`}>
+    {title && <h3 className="text-base font-semibold text-gray-800 mb-4">{title}</h3>}
+    {children}
+  </div>
+);
+
+// ── Simple Table ──────────────────────────────────────────────────────────────
+const Table = ({ cols, rows }) => (
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 border-b">
+        <tr>{cols.map(c => <th key={c.key} className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">{c.label}</th>)}</tr>
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {rows.length === 0
+          ? <tr><td colSpan={cols.length} className="px-4 py-8 text-center text-gray-400 text-xs">No records</td></tr>
+          : rows.map((r, i) => (
+            <tr key={i} className="hover:bg-gray-50">
+              {cols.map(c => <td key={c.key} className="px-4 py-2 text-gray-700">{r[c.key] ?? '—'}</td>)}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+);
+
+// ── Status Badge ──────────────────────────────────────────────────────────────
+const Badge = ({ v }) => {
+  const map = {
+    active: 'bg-green-100 text-green-700',
+    expired: 'bg-red-100 text-red-700',
+    expiring_soon: 'bg-orange-100 text-orange-700',
+    upcoming: 'bg-blue-100 text-blue-700',
+    pending: 'bg-yellow-100 text-yellow-700',
+    ordered: 'bg-blue-100 text-blue-700',
+    delivered: 'bg-green-100 text-green-700',
+    maintenance: 'bg-orange-100 text-orange-700',
+  };
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[v] || 'bg-gray-100 text-gray-700'}`}>{v}</span>;
 };
 
+// ── Export helpers ────────────────────────────────────────────────────────────
+const exportCSV = (rows, cols, filename) => {
+  const header = cols.map(c => c.label).join(',');
+  const body = rows.map(r => cols.map(c => `"${r[c.key] ?? ''}"`).join(',')).join('\n');
+  const blob = new Blob([header + '\n' + body], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `${filename}.csv`; a.click();
+};
+
+const printSection = (title) => {
+  window.print();
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
 export const Reports = () => {
-  const [activeTab, setActiveTab] = useState('assets');
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [selectedReport, setSelectedReport] = useState('');
-  const [dateFrom, setDateFrom] = useState('2024-01-01');
-  const [dateTo, setDateTo] = useState('2024-06-30');
-  const [filterAssetType, setFilterAssetType] = useState('all');
-  const [filterDepartment, setFilterDepartment] = useState('all');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [loading, setLoading] = useState(false);
+
+  // filters
+  const today = new Date();
+  const yearStart = `${today.getFullYear()}-01-01`;
+  const [dateFrom, setDateFrom] = useState(yearStart);
+  const [dateTo, setDateTo] = useState(today.toISOString().split('T')[0]);
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [filterVendor, setFilterVendor] = useState('all');
-  const [filterContractStatus, setFilterContractStatus] = useState('all');
 
-  // Mock Data
-  const assetStats = {
-    totalAssets: 0,
-    categoryWise: [],
-    departmentWise: [],
-    assigned: 0,
-    unassigned: 0,
-    underWarranty: 0
+  // data
+  const [dashboard, setDashboard] = useState(null);
+  const [assetData, setAssetData] = useState(null);
+  const [purchaseData, setPurchaseData] = useState(null);
+  const [contractData, setContractData] = useState(null);
+  const [maintenanceData, setMaintenanceData] = useState(null);
+  const [freqData, setFreqData] = useState(null);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const r = await api.get('/reports/dashboard');
+      setDashboard(r.data.data);
+    } catch { setDashboard(null); }
+  }, []);
+
+  const fetchTab = useCallback(async (tab) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ from: dateFrom, to: dateTo });
+      if (filterCategory !== 'all') params.append('category', filterCategory);
+      if (filterStatus !== 'all') params.append('status', filterStatus);
+      if (filterVendor !== 'all') params.append('vendor', filterVendor);
+
+      if (tab === 'assets') {
+        const r = await api.get(`/reports/assets?${params}`);
+        setAssetData(r.data.data);
+      } else if (tab === 'purchases') {
+        const r = await api.get(`/reports/purchases?${params}`);
+        setPurchaseData(r.data.data);
+      } else if (tab === 'contracts') {
+        const r = await api.get(`/reports/contracts?${params}`);
+        setContractData(r.data.data);
+      } else if (tab === 'maintenance') {
+        const r = await api.get(`/reports/maintenance?${params}`);
+        setMaintenanceData(r.data.data);
+      } else if (tab === 'frequently') {
+        const r = await api.get(`/reports/frequently-requested?${params}`);
+        setFreqData(r.data.data);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }, [dateFrom, dateTo, filterCategory, filterStatus, filterVendor]);
+
+  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') fetchTab(activeTab);
+  }, [activeTab, fetchTab]);
+
+  const tabs = [
+    { id: 'dashboard', label: '🏠 Dashboard' },
+    { id: 'assets',    label: '💻 Assets' },
+    { id: 'purchases', label: '🛒 Purchases' },
+    { id: 'contracts', label: '📋 Contracts' },
+    { id: 'maintenance', label: '🔧 Maintenance' },
+    { id: 'frequently', label: '⭐ Frequently Requested' },
+  ];
+
+  // ── Filters bar ─────────────────────────────────────────────────────────────
+  const Filters = () => (
+    <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap gap-4 items-end">
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+          <option value="all">All Categories</option>
+          <option value="IT">IT</option>
+          <option value="Non-IT">Non-IT</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="disposed">Disposed</option>
+        </select>
+      </div>
+      <button onClick={() => fetchTab(activeTab)}
+        className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+        Apply Filters
+      </button>
+      <button onClick={() => { setDateFrom(yearStart); setDateTo(today.toISOString().split('T')[0]); setFilterCategory('all'); setFilterStatus('all'); setFilterVendor('all'); }}
+        className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">
+        Reset
+      </button>
+    </div>
+  );
+
+  const Loader = () => (
+    <div className="flex justify-center items-center py-20">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+    </div>
+  );
+
+  // ── DASHBOARD TAB ───────────────────────────────────────────────────────────
+  const DashboardTab = () => {
+    if (!dashboard) return <Loader />;
+    const d = dashboard;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <KPI label="Total Assets"        value={d.totalAssets}      icon="💻" color="blue" />
+          <KPI label="Active Assets"       value={d.activeAssets}     icon="✅" color="green" />
+          <KPI label="Inactive Assets"     value={d.inactiveAssets}   icon="⏸️" color="gray" />
+          <KPI label="In Maintenance"      value={d.maintenanceAssets} icon="🔧" color="orange" />
+          <KPI label="Assigned"            value={d.assignedAssets}   icon="👤" color="purple" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <KPI label="Unassigned"          value={d.unassignedAssets} icon="📦" color="yellow" />
+          <KPI label="Total Contracts"     value={d.totalContracts}   icon="📋" color="blue" />
+          <KPI label="Active Contracts"    value={d.activeContracts}  icon="✅" color="green" />
+          <KPI label="Expired Contracts"   value={d.expiredContracts} icon="❌" color="red" />
+          <KPI label="Expiring (30 days)"  value={d.expiringContracts} icon="⚠️" color="orange" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-6">
+            <p className="text-sm font-medium opacity-80">Total Purchase Spend</p>
+            <p className="text-4xl font-bold mt-1">{fmtL(d.totalSpent)}</p>
+          </div>
+          <div className="bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg p-6">
+            <p className="text-sm font-medium opacity-80">Asset Utilization</p>
+            <p className="text-4xl font-bold mt-1">{d.utilization}%</p>
+            <p className="text-xs opacity-70 mt-1">{d.assignedAssets} of {d.totalAssets} assets assigned</p>
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  const purchaseStats = {
-    monthly: [],
-    vendorWise: []
+  // ── ASSETS TAB ──────────────────────────────────────────────────────────────
+  const AssetsTab = () => {
+    if (loading) return <Loader />;
+    if (!assetData) return <Empty />;
+    const d = assetData;
+    return (
+      <div className="space-y-6">
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-4">
+          <KPI label="Total Assets" value={d.total} icon="💻" color="blue" />
+          <KPI label="Assigned" value={d.assigned} icon="👤" color="green" />
+          <KPI label="Unassigned" value={d.unassigned} icon="📦" color="orange" />
+        </div>
+
+        {/* Charts row 1 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Category Distribution">
+            {d.categoryWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={d.categoryWise} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}
+                    label={({ name, value }) => `${name}: ${value}`}>
+                    {d.categoryWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          <Card title="Status Distribution">
+            {d.statusWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={d.statusWise}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" /><YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Count">
+                    {d.statusWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        {/* Charts row 2 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Sub-Type Distribution (Top 10)">
+            {d.subTypeWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={d.subTypeWise.slice(0,10)} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" /><YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#3b82f6" name="Count" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          <Card title="Assets Added per Month">
+            {d.monthlyTrend.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={d.monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis /><Tooltip />
+                  <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#bfdbfe" name="Assets Added" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        {/* Department-wise */}
+        {d.deptWise.length > 0 && (
+          <Card title="Assets by Assigned User (Top 10)">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={d.deptWise}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} />
+                <YAxis /><Tooltip />
+                <Bar dataKey="value" fill="#a855f7" name="Assets" />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
+        {/* Recently added table */}
+        <Card title={`Recently Added Assets (${d.recentlyAdded.length})`}>
+          <div className="mb-3 flex justify-end">
+            <button onClick={() => exportCSV(d.recentlyAdded, [
+              {key:'asset_tag',label:'Tag'},{key:'asset_name',label:'Name'},
+              {key:'category',label:'Category'},{key:'sub_type',label:'Sub-type'},
+              {key:'status',label:'Status'},{key:'assigned_to',label:'Assigned To'}
+            ], 'recently_added_assets')}
+              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">
+              ⬇ Export CSV
+            </button>
+          </div>
+          <Table
+            cols={[
+              {key:'asset_tag',label:'Tag'},{key:'asset_name',label:'Name'},
+              {key:'category',label:'Category'},{key:'sub_type',label:'Sub-type'},
+              {key:'status',label:'Status'},{key:'assigned_to',label:'Assigned To'}
+            ]}
+            rows={d.recentlyAdded}
+          />
+        </Card>
+      </div>
+    );
   };
 
-  const contractStats = {
-    active: 0,
-    expiring: 0,
-    expired: 0
+  // ── PURCHASES TAB ───────────────────────────────────────────────────────────
+  const PurchasesTab = () => {
+    if (loading) return <Loader />;
+    if (!purchaseData) return <Empty />;
+    const d = purchaseData;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <KPI label="Total Orders" value={d.total} icon="🛒" color="blue" />
+          <KPI label="Total Spent" value={fmtL(d.totalAmount)} icon="💰" color="green" />
+          <KPI label="Avg per Order" value={fmtL(d.total ? d.totalAmount / d.total : 0)} icon="📊" color="purple" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Monthly Purchase Trend">
+            {d.monthly.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={d.monthly}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis />
+                  <Tooltip formatter={v => `₹${v.toLocaleString('en-IN')}`} />
+                  <Area type="monotone" dataKey="amount" stroke="#22c55e" fill="#bbf7d0" name="Amount (₹)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          <Card title="Order Count by Month">
+            {d.monthly.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={d.monthly}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#3b82f6" name="Orders" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Vendor-wise Spending (Top 10)">
+            {d.vendorWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={d.vendorWise} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" /><YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={v => `₹${v.toLocaleString('en-IN')}`} />
+                  <Bar dataKey="amount" fill="#f97316" name="Amount (₹)" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          <Card title="Status Distribution">
+            {d.statusWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={d.statusWise} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90}
+                    label={({ name, count }) => `${name}: ${count}`}>
+                    {d.statusWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        <Card title="Top Purchases by Value">
+          <div className="mb-3 flex justify-end">
+            <button onClick={() => exportCSV(d.topPurchases, [
+              {key:'purchase_id',label:'PO ID'},{key:'vendor_name',label:'Vendor'},
+              {key:'total_amount',label:'Amount'},{key:'purchase_date',label:'Date'},{key:'status',label:'Status'}
+            ], 'top_purchases')}
+              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">
+              ⬇ Export CSV
+            </button>
+          </div>
+          <Table
+            cols={[
+              {key:'purchase_id',label:'PO ID'},{key:'vendor_name',label:'Vendor'},
+              {key:'total_amount',label:'Amount (₹)'},{key:'purchase_date',label:'Date'},{key:'status',label:'Status'}
+            ]}
+            rows={d.topPurchases.map(p => ({
+              ...p,
+              total_amount: `₹${(parseFloat(p.total_amount)||0).toLocaleString('en-IN')}`,
+              purchase_date: new Date(p.purchase_date).toLocaleDateString('en-IN'),
+              status: <Badge v={p.status} />
+            }))}
+          />
+        </Card>
+      </div>
+    );
   };
 
-  const maintenanceStats = {
-    needingService: 0,
-    repairHistory: []
+  // ── CONTRACTS TAB ───────────────────────────────────────────────────────────
+  const ContractsTab = () => {
+    if (loading) return <Loader />;
+    if (!contractData) return <Empty />;
+    const d = contractData;
+    const cols = [
+      {key:'contract_id',label:'ID'},{key:'contract_name',label:'Name'},
+      {key:'vendor_name',label:'Vendor'},{key:'contract_value',label:'Value (₹)'},
+      {key:'active_till',label:'Expires'},{key:'status',label:'Status'}
+    ];
+    const mapRow = r => ({
+      ...r,
+      contract_value: `₹${(r.contract_value||0).toLocaleString('en-IN')}`,
+      active_till: new Date(r.active_till).toLocaleDateString('en-IN'),
+      status: <Badge v={r.status} />
+    });
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <KPI label="Total Contracts" value={d.total} icon="📋" color="blue" />
+          <KPI label="Total Value" value={fmtL(d.totalValue)} icon="💰" color="green" />
+          <KPI label="Expiring ≤30 days" value={d.expiring30.length} icon="⚠️" color="orange" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Status Distribution">
+            {d.statusWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie data={d.statusWise} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90}
+                    label={({ name, count }) => `${name}: ${count}`}>
+                    {d.statusWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+          <Card title="Vendor-wise Contract Value">
+            {d.vendorWise.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={d.vendorWise}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} /><YAxis />
+                  <Tooltip formatter={v => `₹${v.toLocaleString('en-IN')}`} />
+                  <Bar dataKey="value" fill="#3b82f6" name="Value (₹)" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        {d.expiring30.length > 0 && (
+          <Card title={`⚠️ Expiring in 30 Days (${d.expiring30.length})`} className="border-l-4 border-orange-500">
+            <Table cols={cols} rows={d.expiring30.map(mapRow)} />
+          </Card>
+        )}
+        {d.expiring60.length > 0 && (
+          <Card title={`Expiring in 31–60 Days (${d.expiring60.length})`} className="border-l-4 border-yellow-400">
+            <Table cols={cols} rows={d.expiring60.map(mapRow)} />
+          </Card>
+        )}
+        {d.expiring90.length > 0 && (
+          <Card title={`Expiring in 61–90 Days (${d.expiring90.length})`} className="border-l-4 border-blue-400">
+            <Table cols={cols} rows={d.expiring90.map(mapRow)} />
+          </Card>
+        )}
+
+        <Card title={`All Contracts (${d.allContracts.length})`}>
+          <div className="mb-3 flex justify-end">
+            <button onClick={() => exportCSV(d.allContracts, cols, 'contracts_report')}
+              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">
+              ⬇ Export CSV
+            </button>
+          </div>
+          <Table cols={cols} rows={d.allContracts.map(mapRow)} />
+        </Card>
+      </div>
+    );
   };
 
-  const frequentlyRequested = {
-    mostAssigned: [],
-    mostUsedCategories: []
+  // ── MAINTENANCE TAB ─────────────────────────────────────────────────────────
+  const MaintenanceTab = () => {
+    if (loading) return <Loader />;
+    if (!maintenanceData) return <Empty />;
+    const d = maintenanceData;
+    return (
+      <div className="space-y-6">
+        <KPI label="Assets Under Maintenance" value={d.total} icon="🔧" color="orange" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Maintenance by Sub-type">
+            {d.subTypeWise.length === 0 ? <Empty msg="No assets currently under maintenance." /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={d.subTypeWise}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#f97316" name="Count" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+          <Card title="Maintenance by Category">
+            {d.categoryWise.length === 0 ? <Empty msg="No assets currently under maintenance." /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie data={d.categoryWise} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90}
+                    label={({ name, count }) => `${name}: ${count}`}>
+                    {d.categoryWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        <Card title={`Assets Under Maintenance (${d.assets.length})`}>
+          {d.assets.length === 0
+            ? <Empty msg="No assets currently under maintenance." />
+            : <Table
+                cols={[
+                  {key:'asset_tag',label:'Tag'},{key:'asset_name',label:'Name'},
+                  {key:'category',label:'Category'},{key:'sub_type',label:'Sub-type'},
+                  {key:'assigned_to',label:'Last Assigned'},{key:'updated_at',label:'Since'}
+                ]}
+                rows={d.assets.map(a => ({
+                  ...a,
+                  updated_at: new Date(a.updated_at).toLocaleDateString('en-IN')
+                }))}
+              />
+          }
+        </Card>
+      </div>
+    );
   };
 
-  const handleGenerateReport = (reportName) => {
-    setSelectedReport(reportName);
-    setShowExportModal(true);
+  // ── FREQUENTLY REQUESTED TAB ────────────────────────────────────────────────
+  const FreqTab = () => {
+    if (loading) return <Loader />;
+    if (!freqData) return <Empty />;
+    const d = freqData;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title="Most Assigned Asset Types">
+            {d.mostAssigned.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={d.mostAssigned} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" /><YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#a855f7" name="Assigned Count" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+          <Card title="Category Demand">
+            {d.categoryDemand.length === 0 ? <Empty /> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={d.categoryDemand} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={100}
+                    label={({ name, count }) => `${name}: ${count}`}>
+                    {d.categoryDemand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        <Card title="Users with Most Assets Assigned">
+          {d.perUser.length === 0 ? <Empty /> : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={d.perUser}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} /><YAxis />
+                <Tooltip />
+                <Bar dataKey="count" fill="#06b6d4" name="Assets Assigned" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        <Card title="Most Assigned Asset Types — Detail">
+          <Table
+            cols={[{key:'name',label:'Sub-type'},{key:'category',label:'Category'},{key:'count',label:'Assigned Count'}]}
+            rows={d.mostAssigned}
+          />
+        </Card>
+      </div>
+    );
   };
 
-  const handleExport = (format) => {
-    let filename = selectedReport.toLowerCase().replace(/\s+/g, '_');
-
-    if (format === 'pdf') {
-      // For PDF, show a message and prepare for download
-      const pdfContent = `
-        ${selectedReport}
-        Generated: ${new Date().toLocaleDateString()}
-        Filters: From ${dateFrom} to ${dateTo}
-
-        This is a sample PDF export.
-        In production, you would use a library like jsPDF or pdfkit.
-      `;
-      const blob = new Blob([pdfContent], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${filename}.pdf`;
-      link.click();
-    } else if (format === 'excel') {
-      // For Excel, create CSV with proper formatting
-      const csv = `${selectedReport}
-Generated: ${new Date().toLocaleDateString()}
-Filters: From ${dateFrom} to ${dateTo}
-
-Date,Value,Count
-${new Date().toLocaleDateString()},Sample Data,100
-`;
-      const blob = new Blob([csv], { type: 'application/vnd.ms-excel' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${filename}.xlsx`;
-      link.click();
-    } else if (format === 'csv') {
-      // CSV export
-      const csv = `${selectedReport}
-Generated: ${new Date().toLocaleDateString()}
-Filters: From ${dateFrom} to ${dateTo}
-
-Date,Value,Count
-${new Date().toLocaleDateString()},Sample Data,100
-`;
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${filename}.csv`;
-      link.click();
-    }
-
-    toast.success(`${selectedReport} exported as ${format.toUpperCase()}`);
-    setShowExportModal(false);
+  const tabContent = {
+    dashboard: <DashboardTab />,
+    assets: <AssetsTab />,
+    purchases: <PurchasesTab />,
+    contracts: <ContractsTab />,
+    maintenance: <MaintenanceTab />,
+    frequently: <FreqTab />,
   };
 
   return (
     <AppLayout title="Reports & Analytics">
-      <div className="space-y-6">
-
+      <div className="space-y-5">
         {/* Header */}
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">Reports & Analytics</h2>
-          <button
-            onClick={() => toast.success('Report refresh initiated')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-all"
-          >
-            🔄 Refresh Reports
+          <button onClick={() => { fetchDashboard(); fetchTab(activeTab); }}
+            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
+            🔄 Refresh
           </button>
         </div>
 
-        {/* Filters Section */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">🔍 Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Asset Type</label>
-              <select
-                value={filterAssetType}
-                onChange={(e) => setFilterAssetType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Types</option>
-                <option value="it">IT Assets</option>
-                <option value="non-it">Non-IT Assets</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Departments</option>
-                <option value="it">IT</option>
-                <option value="hr">HR</option>
-                <option value="finance">Finance</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Contract Status</label>
-              <select
-                value={filterContractStatus}
-                onChange={(e) => setFilterContractStatus(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="expiring">Expiring</option>
-                <option value="expired">Expired</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('assets')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'assets' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📦 Assets
-          </button>
-          <button
-            onClick={() => setActiveTab('purchases')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'purchases' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            🛒 Purchases
-          </button>
-          <button
-            onClick={() => setActiveTab('contracts')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'contracts' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📋 Contracts
-          </button>
-          <button
-            onClick={() => setActiveTab('maintenance')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'maintenance' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            🔧 Maintenance
-          </button>
-          <button
-            onClick={() => setActiveTab('frequently')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'frequently' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            ⭐ Frequently Requested
-          </button>
-        </div>
-
-        {/* ASSETS REPORTS */}
-        {activeTab === 'assets' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <ReportCard
-                title="Total Assets"
-                icon="📦"
-                count={assetStats.totalAssets}
-                description="Complete inventory of all assets"
-                onGenerate={() => handleGenerateReport('Total Assets Report')}
-              />
-              <ReportCard
-                title="Category Wise Assets"
-                icon="📊"
-                count={assetStats.categoryWise.length}
-                description="Assets breakdown by category"
-                onGenerate={() => handleGenerateReport('Category Wise Report')}
-              />
-              <ReportCard
-                title="Department Wise Assets"
-                icon="🏢"
-                count={assetStats.departmentWise.length}
-                description="Assets distributed by department"
-                onGenerate={() => handleGenerateReport('Department Wise Report')}
-              />
-              <ReportCard
-                title="Assigned Assets"
-                icon="👥"
-                count={assetStats.assigned}
-                description="Assets assigned to users"
-                onGenerate={() => handleGenerateReport('Assigned Assets Report')}
-              />
-              <ReportCard
-                title="Unassigned Assets"
-                icon="📍"
-                count={assetStats.unassigned}
-                description="Assets available in inventory"
-                onGenerate={() => handleGenerateReport('Unassigned Assets Report')}
-              />
-              <ReportCard
-                title="Warranty Report"
-                icon="✅"
-                count={assetStats.underWarranty}
-                description="Assets under warranty coverage"
-                onGenerate={() => handleGenerateReport('Warranty Report')}
-              />
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Category Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={assetStats.categoryWise}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ category, count }) => `${category}: ${count}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="count"
-                    >
-                      {assetStats.categoryWise.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Department Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={assetStats.departmentWise}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="dept" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PURCHASES REPORTS */}
-        {activeTab === 'purchases' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <ReportCard
-                title="Monthly Purchases"
-                icon="📅"
-                count={purchaseStats.monthly.length}
-                description="Purchase trends over time"
-                onGenerate={() => handleGenerateReport('Monthly Purchases Report')}
-              />
-              <ReportCard
-                title="Vendor Wise Purchases"
-                icon="🏪"
-                count={purchaseStats.vendorWise.length}
-                description="Spending by vendor"
-                onGenerate={() => handleGenerateReport('Vendor Wise Report')}
-              />
-              <ReportCard
-                title="Cost Analysis"
-                icon="💰"
-                count="₹12.2L"
-                description="Total purchase expenditure"
-                onGenerate={() => handleGenerateReport('Cost Analysis Report')}
-              />
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Purchase Trend</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={purchaseStats.monthly}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Area type="monotone" dataKey="amount" fill="#3b82f6" stroke="#3b82f6" name="Amount (₹)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Vendor Spending</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={purchaseStats.vendorWise}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="vendor" angle={-45} textAnchor="end" height={80} />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="spent" fill="#8b5cf6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CONTRACTS REPORTS */}
-        {activeTab === 'contracts' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <ReportCard
-                title="Active Contracts"
-                icon="✅"
-                count={contractStats.active}
-                description="Currently active contracts"
-                onGenerate={() => handleGenerateReport('Active Contracts Report')}
-              />
-              <ReportCard
-                title="Expiring Contracts"
-                icon="⚠️"
-                count={contractStats.expiring}
-                description="Contracts expiring soon"
-                onGenerate={() => handleGenerateReport('Expiring Contracts Report')}
-              />
-              <ReportCard
-                title="Expired Contracts"
-                icon="❌"
-                count={contractStats.expired}
-                description="Expired contracts"
-                onGenerate={() => handleGenerateReport('Expired Contracts Report')}
-              />
-            </div>
-
-            {/* Summary */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Contract Summary</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg border-l-4 border-green-500">
-                  <p className="text-gray-600 text-sm">Active Contracts</p>
-                  <p className="text-3xl font-bold text-green-700 mt-2">{contractStats.active}</p>
-                </div>
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-lg border-l-4 border-orange-500">
-                  <p className="text-gray-600 text-sm">Expiring Soon</p>
-                  <p className="text-3xl font-bold text-orange-700 mt-2">{contractStats.expiring}</p>
-                </div>
-                <div className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-lg border-l-4 border-red-500">
-                  <p className="text-gray-600 text-sm">Expired</p>
-                  <p className="text-3xl font-bold text-red-700 mt-2">{contractStats.expired}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MAINTENANCE REPORTS */}
-        {activeTab === 'maintenance' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <ReportCard
-                title="Assets Needing Service"
-                icon="🔧"
-                count={maintenanceStats.needingService}
-                description="Assets requiring maintenance"
-                onGenerate={() => handleGenerateReport('Maintenance Due Report')}
-              />
-              <ReportCard
-                title="Repair History"
-                icon="🛠️"
-                count={maintenanceStats.repairHistory.reduce((sum, m) => sum + m.repairs, 0)}
-                description="Total repairs performed"
-                onGenerate={() => handleGenerateReport('Repair History Report')}
-              />
-            </div>
-
-            {/* Chart */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Repair Trend</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={maintenanceStats.repairHistory}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="repairs" stroke="#f59e0b" strokeWidth={2} name="Repairs" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-
-        {/* FREQUENTLY REQUESTED REPORTS */}
-        {activeTab === 'frequently' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Most Assigned Assets</h3>
-                <div className="space-y-4">
-                  {frequentlyRequested.mostAssigned.map((asset, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-800">{idx + 1}. {asset.asset}</p>
-                        <p className="text-sm text-gray-600">{asset.count} assignments</p>
-                      </div>
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${(asset.count / 42) * 100}%` }}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Most Used Categories</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={frequentlyRequested.mostUsedCategories}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="category" angle={-45} textAnchor="end" height={80} />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="usage" fill="#10b981" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <button
-              onClick={() => handleGenerateReport('Frequently Requested Assets Report')}
-              className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition"
-            >
-              📊 Generate Full Report
+        {/* Tab bar */}
+        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition border-b-2 ${
+                activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}>
+              {t.label}
             </button>
-          </div>
-        )}
+          ))}
+        </div>
 
-        {/* Export Modal */}
-        <ExportModal
-          isOpen={showExportModal}
-          onClose={() => setShowExportModal(false)}
-          reportName={selectedReport}
-          onExport={handleExport}
-        />
+        {/* Filters (not shown on dashboard) */}
+        {activeTab !== 'dashboard' && <Filters />}
+
+        {/* Content */}
+        {tabContent[activeTab]}
       </div>
     </AppLayout>
   );

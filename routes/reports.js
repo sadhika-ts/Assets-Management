@@ -1,375 +1,394 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
-const { Op } = require('sequelize');
+const { Op, fn, col, literal } = require('sequelize');
 const models = require('../models');
-const { verifyToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Dashboard - Quick overview of system
-router.get('/dashboard', /* verifyToken, */ async (req, res) => {  // Commented for development - remove in production
+// Helper: safe count
+const safeCount = async (model, where = {}) => {
+  try { return await model.count({ where }); } catch { return 0; }
+};
+
+// Helper: date range where clause
+const dateWhere = (field, from, to) => {
+  if (!from && !to) return {};
+  const clause = {};
+  if (from) clause[Op.gte] = new Date(from);
+  if (to) clause[Op.lte] = new Date(to);
+  return { [field]: clause };
+};
+
+// GET /reports/dashboard
+router.get('/dashboard', async (req, res) => {
   try {
-    try {
-      const totalAssets = await models.Asset.count();
-      const itAssets = await models.Asset.count({ where: { category: 'IT' } });
-      const nonItAssets = await models.Asset.count({ where: { category: 'Non-IT' } });
-      const activeAssets = await models.Asset.count({ where: { status: 'active' } });
-      const inactiveAssets = await models.Asset.count({ where: { status: 'inactive' } });
-      const disposedAssets = await models.Asset.count({ where: { status: 'disposed' } });
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
 
-      // Expiring contracts (next 30 days)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const thirtyDaysFromNow = new Date(today);
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const [
+      totalAssets, activeAssets, inactiveAssets, maintenanceAssets,
+      assignedAssets, unassignedAssets,
+      totalContracts, activeContracts, expiredContracts, expiringContracts,
+      totalPurchases
+    ] = await Promise.all([
+      safeCount(models.Asset),
+      safeCount(models.Asset, { status: 'active' }),
+      safeCount(models.Asset, { status: 'inactive' }),
+      safeCount(models.Asset, { status: 'maintenance' }),
+      models.Asset.count({ where: { assigned_to: { [Op.not]: null, [Op.ne]: '' } } }).catch(() => 0),
+      models.Asset.count({ where: { [Op.or]: [{ assigned_to: null }, { assigned_to: '' }] } }).catch(() => 0),
+      safeCount(models.Contract),
+      safeCount(models.Contract, { status: 'active' }),
+      safeCount(models.Contract, { status: 'expired' }),
+      safeCount(models.Contract, { status: 'active', active_till: { [Op.gte]: today, [Op.lte]: in30 } }),
+      models.Purchase.findAll({ attributes: [[fn('SUM', col('total_amount')), 'total']], raw: true }).catch(() => [{ total: 0 }])
+    ]);
 
-      const expiringContracts = await models.Contract.findAll({
-        where: {
-          status: 'active',
-          active_till: {
-            [Op.gte]: today,
-            [Op.lte]: thirtyDaysFromNow
-          }
-        },
-        order: [['active_till', 'ASC']]
-      });
+    const totalSpent = parseFloat(totalPurchases[0]?.total) || 0;
+    const utilization = totalAssets > 0 ? Math.round((assignedAssets / totalAssets) * 100) : 0;
 
-      // Recent assets (last 5 added)
-      const recentAssets = await models.Asset.findAll({
-        attributes: ['id', 'asset_tag', 'category', 'sub_type', 'status', 'created_at'],
-        order: [['created_at', 'DESC']],
-        limit: 5,
-        include: [
-          {
-            association: 'detail',
-            attributes: ['os_type', 'processor_name']
-          }
-        ]
-      });
-
-      res.json({
-        success: true,
-        message: 'Dashboard data retrieved successfully',
-        data: {
-          total_assets: totalAssets,
-          it_assets: itAssets,
-          non_it_assets: nonItAssets,
-          active: activeAssets,
-          inactive: inactiveAssets,
-          disposed: disposedAssets,
-          expiring_contracts: expiringContracts,
-          recent_assets: recentAssets
-        }
-      });
-    } catch (dbError) {
-      console.warn('Database unavailable, returning mock dashboard data:', dbError.message);
-
-      res.json({
-        success: true,
-        message: 'Dashboard data (Mock Data - Database unavailable)',
-        data: {
-          totalAssets: 5,
-          itAssets: 5,
-          nonItAssets: 0,
-          activeContracts: 2,
-          expiringContracts: 0,
-          purchasedThisMonth: 2,
-          underWarranty: 2,
-          assignedAssets: 2,
-          inStock: 3,
-          needingMaintenance: 0
-        }
-      });
-    }
+    res.json({
+      success: true,
+      data: {
+        totalAssets, activeAssets, inactiveAssets, maintenanceAssets,
+        assignedAssets, unassignedAssets,
+        totalContracts, activeContracts, expiredContracts, expiringContracts,
+        totalSpent, utilization
+      }
+    });
   } catch (error) {
     console.error('Dashboard error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve dashboard data',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Assets by sub_type with count
-router.get(
-  '/by-category',
-  verifyToken,
-  async (req, res) => {
-    try {
-      const byCategory = await models.Asset.findAll({
-        attributes: [
-          'sub_type',
-          [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'count']
-        ],
-        group: ['sub_type'],
-        order: [[models.sequelize.fn('COUNT', models.sequelize.col('id')), 'DESC']],
-        raw: true
-      });
+// GET /reports/assets
+router.get('/assets', async (req, res) => {
+  try {
+    const { from, to, category, status } = req.query;
 
-      res.json({
-        success: true,
-        message: 'Assets by category retrieved successfully',
-        data: {
-          total: byCategory.reduce((sum, item) => sum + parseInt(item.count), 0),
-          breakdown: byCategory
-        }
-      });
-    } catch (error) {
-      console.error('Assets by category error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to retrieve assets by category',
-        message: error.message
-      });
+    const where = {};
+    if (category && category !== 'all') where.category = category;
+    if (status && status !== 'all') where.status = status;
+    if (from || to) {
+      const dw = dateWhere('created_at', from, to);
+      Object.assign(where, dw);
     }
+
+    // Category-wise distribution
+    const categoryWise = await models.Asset.findAll({
+      attributes: ['category', [fn('COUNT', col('id')), 'count']],
+      where,
+      group: ['category'],
+      raw: true
+    });
+
+    // Sub-type distribution
+    const subTypeWise = await models.Asset.findAll({
+      attributes: ['sub_type', [fn('COUNT', col('id')), 'count']],
+      where,
+      group: ['sub_type'],
+      order: [[fn('COUNT', col('id')), 'DESC']],
+      raw: true
+    });
+
+    // Status distribution
+    const statusWise = await models.Asset.findAll({
+      attributes: ['status', [fn('COUNT', col('id')), 'count']],
+      where: category && category !== 'all' ? { category } : {},
+      group: ['status'],
+      raw: true
+    });
+
+    // Assigned vs unassigned
+    const assignedCount = await models.Asset.count({
+      where: { ...where, assigned_to: { [Op.not]: null, [Op.ne]: '' } }
+    });
+    const totalCount = await models.Asset.count({ where });
+    const unassignedCount = totalCount - assignedCount;
+
+    // Department (assigned_to) wise
+    const deptWise = await models.Asset.findAll({
+      attributes: ['assigned_to', [fn('COUNT', col('id')), 'count']],
+      where: { ...where, assigned_to: { [Op.not]: null, [Op.ne]: '' } },
+      group: ['assigned_to'],
+      order: [[fn('COUNT', col('id')), 'DESC']],
+      limit: 10,
+      raw: true
+    });
+
+    // Recently added
+    const recentlyAdded = await models.Asset.findAll({
+      attributes: ['asset_tag', 'asset_name', 'category', 'sub_type', 'status', 'assigned_to', 'created_at'],
+      where,
+      order: [['created_at', 'DESC']],
+      limit: 10,
+      raw: true
+    });
+
+    // Monthly additions trend
+    const allAssets = await models.Asset.findAll({
+      attributes: ['created_at'],
+      where,
+      raw: true
+    });
+    const monthlyMap = {};
+    allAssets.forEach(a => {
+      const d = new Date(a.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (!monthlyMap[key]) monthlyMap[key] = { month: label, count: 0 };
+      monthlyMap[key].count++;
+    });
+    const monthlyTrend = Object.values(monthlyMap).sort((a,b) => a.month.localeCompare(b.month));
+
+    res.json({
+      success: true,
+      data: {
+        total: totalCount,
+        assigned: assignedCount,
+        unassigned: unassignedCount,
+        categoryWise: categoryWise.map(r => ({ name: r.category, value: parseInt(r.count) })),
+        subTypeWise: subTypeWise.map(r => ({ name: r.sub_type, value: parseInt(r.count) })),
+        statusWise: statusWise.map(r => ({ name: r.status, value: parseInt(r.count) })),
+        deptWise: deptWise.map(r => ({ name: r.assigned_to, value: parseInt(r.count) })),
+        monthlyTrend,
+        recentlyAdded
+      }
+    });
+  } catch (error) {
+    console.error('Asset report error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
-);
+});
 
-// Assets by status with count
-router.get(
-  '/by-status',
-  verifyToken,
-  async (req, res) => {
-    try {
-      const byStatus = await models.Asset.findAll({
-        attributes: [
-          'status',
-          [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'count']
-        ],
-        group: ['status'],
-        order: [[models.sequelize.fn('COUNT', models.sequelize.col('id')), 'DESC']],
-        raw: true
-      });
+// GET /reports/purchases
+router.get('/purchases', async (req, res) => {
+  try {
+    const { from, to, vendor } = req.query;
+    const where = {};
+    if (vendor && vendor !== 'all') where.vendor_name = vendor;
+    if (from || to) Object.assign(where, dateWhere('purchase_date', from, to));
 
-      res.json({
-        success: true,
-        message: 'Assets by status retrieved successfully',
-        data: {
-          total: byStatus.reduce((sum, item) => sum + parseInt(item.count), 0),
-          breakdown: byStatus
-        }
-      });
-    } catch (error) {
-      console.error('Assets by status error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to retrieve assets by status',
-        message: error.message
-      });
-    }
-  }
-);
+    const allPurchases = await models.Purchase.findAll({ where, raw: true });
 
-// OS Activation status count
-router.get(
-  '/os-activation',
-  verifyToken,
-  async (req, res) => {
-    try {
-      const osActivation = await models.AssetDetail.findAll({
-        attributes: [
-          'os_activated',
-          [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'count']
-        ],
-        group: ['os_activated'],
-        raw: true
-      });
+    // Monthly trend
+    const monthlyMap = {};
+    allPurchases.forEach(p => {
+      const d = new Date(p.purchase_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (!monthlyMap[key]) monthlyMap[key] = { month: label, amount: 0, count: 0 };
+      monthlyMap[key].amount += parseFloat(p.total_amount) || 0;
+      monthlyMap[key].count++;
+    });
+    const monthly = Object.values(monthlyMap).sort((a,b) => a.month.localeCompare(b.month));
 
-      const activated = osActivation.find(item => item.os_activated === true)?.count || 0;
-      const notActivated = osActivation.find(item => item.os_activated === false)?.count || 0;
+    // Vendor-wise
+    const vendorMap = {};
+    allPurchases.forEach(p => {
+      if (!vendorMap[p.vendor_name]) vendorMap[p.vendor_name] = { name: p.vendor_name, amount: 0, count: 0 };
+      vendorMap[p.vendor_name].amount += parseFloat(p.total_amount) || 0;
+      vendorMap[p.vendor_name].count++;
+    });
+    const vendorWise = Object.values(vendorMap).sort((a,b) => b.amount - a.amount).slice(0, 10);
 
-      res.json({
-        success: true,
-        message: 'OS activation status retrieved successfully',
-        data: {
-          total: parseInt(activated) + parseInt(notActivated),
-          activated: parseInt(activated),
-          not_activated: parseInt(notActivated)
-        }
-      });
-    } catch (error) {
-      console.error('OS activation error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to retrieve OS activation status',
-        message: error.message
-      });
-    }
-  }
-);
+    // Status-wise
+    const statusMap = {};
+    allPurchases.forEach(p => {
+      if (!statusMap[p.status]) statusMap[p.status] = { name: p.status, count: 0, amount: 0 };
+      statusMap[p.status].count++;
+      statusMap[p.status].amount += parseFloat(p.total_amount) || 0;
+    });
+    const statusWise = Object.values(statusMap);
 
-// MS Office installation count
-router.get(
-  '/ms-office',
-  verifyToken,
-  async (req, res) => {
-    try {
-      const msOffice = await models.AssetDetail.findAll({
-        attributes: [
-          'ms_office',
-          [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'count']
-        ],
-        group: ['ms_office'],
-        raw: true
-      });
-
-      const installed = msOffice.find(item => item.ms_office === true)?.count || 0;
-      const notInstalled = msOffice.find(item => item.ms_office === false)?.count || 0;
-
-      res.json({
-        success: true,
-        message: 'MS Office status retrieved successfully',
-        data: {
-          total: parseInt(installed) + parseInt(notInstalled),
-          installed: parseInt(installed),
-          not_installed: parseInt(notInstalled)
-        }
-      });
-    } catch (error) {
-      console.error('MS Office error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to retrieve MS Office status',
-        message: error.message
-      });
-    }
-  }
-);
-
-// Audit log - recent 50 entries with user and asset info
-router.get(
-  '/audit-log',
-  verifyToken,
-  async (req, res) => {
-    try {
-      const auditLogs = await models.AuditLog.findAll({
-        attributes: [
-          'id',
-          'asset_id',
-          'action',
-          'old_value',
-          'new_value',
-          'changed_at'
-        ],
-        include: [
-          {
-            association: 'user',
-            attributes: ['id', 'name', 'email']
-          },
-          {
-            association: 'asset',
-            attributes: ['id', 'asset_tag', 'category', 'sub_type']
-          }
-        ],
-        order: [['changed_at', 'DESC']],
-        limit: 50
-      });
-
-      res.json({
-        success: true,
-        message: 'Audit logs retrieved successfully',
-        data: {
-          total: auditLogs.length,
-          logs: auditLogs
-        }
-      });
-    } catch (error) {
-      console.error('Audit log error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to retrieve audit logs',
-        message: error.message
-      });
-    }
-  }
-);
-
-// Export all assets as JSON (for CSV conversion on frontend)
-router.get(
-  '/export',
-  verifyToken,
-  async (req, res) => {
-    try {
-      const assets = await models.Asset.findAll({
-        attributes: [
-          'id',
-          'asset_tag',
-          'category',
-          'sub_type',
-          'status',
-          'serial_no',
-          'mac_address',
-          'location',
-          'assigned_to',
-          'created_at'
-        ],
-        include: [
-          {
-            association: 'detail',
-            attributes: [
-              'os_type',
-              'os_version',
-              'processor_name',
-              'manufacturer',
-              'cores',
-              'ram_gb',
-              'disk_gb',
-              'ms_office',
-              'software_list'
-            ]
-          },
-          {
-            association: 'assignedUser',
-            attributes: ['id', 'name', 'email']
-          },
-          {
-            association: 'purchase',
-            attributes: ['id', 'purchase_id', 'vendor_name', 'purchase_date', 'total_amount']
-          }
-        ],
-        order: [['created_at', 'DESC']]
-      });
-
-      // Format for CSV export
-      const exportData = assets.map(asset => ({
-        asset_tag: asset.asset_tag,
-        category: asset.category,
-        sub_type: asset.sub_type,
-        status: asset.status,
-        serial_no: asset.serial_no || '',
-        mac_address: asset.mac_address || '',
-        location: asset.location || '',
-        assigned_to: asset.assignedUser?.name || '',
-        os_type: asset.detail?.os_type || '',
-        os_version: asset.detail?.os_version || '',
-        processor_name: asset.detail?.processor_name || '',
-        manufacturer: asset.detail?.manufacturer || '',
-        cores: asset.detail?.cores || '',
-        ram_gb: asset.detail?.ram_gb || '',
-        disk_gb: asset.detail?.disk_gb || '',
-        ms_office: asset.detail?.ms_office ? 'Yes' : 'No',
-        software_list: asset.detail?.software_list || '',
-        vendor_name: asset.purchase?.vendor_name || '',
-        purchase_date: asset.purchase?.purchase_date || '',
-        total_amount: asset.purchase?.total_amount || '',
-        created_at: asset.created_at
+    // Top purchases by amount
+    const topPurchases = [...allPurchases]
+      .sort((a,b) => parseFloat(b.total_amount) - parseFloat(a.total_amount))
+      .slice(0, 10)
+      .map(p => ({
+        purchase_id: p.purchase_id,
+        vendor_name: p.vendor_name,
+        total_amount: parseFloat(p.total_amount),
+        purchase_date: p.purchase_date,
+        status: p.status
       }));
 
-      res.json({
-        success: true,
-        message: 'Assets exported successfully',
-        data: exportData
-      });
-    } catch (error) {
-      console.error('Export error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to export assets',
-        message: error.message
-      });
-    }
+    const totalAmount = allPurchases.reduce((s, p) => s + (parseFloat(p.total_amount) || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        total: allPurchases.length,
+        totalAmount,
+        monthly,
+        vendorWise,
+        statusWise,
+        topPurchases
+      }
+    });
+  } catch (error) {
+    console.error('Purchase report error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
-);
+});
+
+// GET /reports/contracts
+router.get('/contracts', async (req, res) => {
+  try {
+    const { from, to, status } = req.query;
+    const where = {};
+    if (status && status !== 'all') where.status = status;
+    if (from || to) Object.assign(where, dateWhere('active_from', from, to));
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
+    const in60 = new Date(today); in60.setDate(in60.getDate() + 60);
+    const in90 = new Date(today); in90.setDate(in90.getDate() + 90);
+
+    const allContracts = await models.Contract.findAll({ where, raw: true });
+
+    // Status-wise
+    const statusMap = {};
+    allContracts.forEach(c => {
+      if (!statusMap[c.status]) statusMap[c.status] = { name: c.status, count: 0, value: 0 };
+      statusMap[c.status].count++;
+      statusMap[c.status].value += parseFloat(c.contract_value) || 0;
+    });
+
+    // Expiry buckets
+    const expiring30 = allContracts.filter(c => {
+      const d = new Date(c.active_till);
+      return d >= today && d <= in30 && c.status !== 'expired';
+    });
+    const expiring60 = allContracts.filter(c => {
+      const d = new Date(c.active_till);
+      return d > in30 && d <= in60 && c.status !== 'expired';
+    });
+    const expiring90 = allContracts.filter(c => {
+      const d = new Date(c.active_till);
+      return d > in60 && d <= in90 && c.status !== 'expired';
+    });
+
+    // Vendor-wise
+    const vendorMap = {};
+    allContracts.forEach(c => {
+      if (!vendorMap[c.vendor_name]) vendorMap[c.vendor_name] = { name: c.vendor_name, count: 0, value: 0 };
+      vendorMap[c.vendor_name].count++;
+      vendorMap[c.vendor_name].value += parseFloat(c.contract_value) || 0;
+    });
+    const vendorWise = Object.values(vendorMap).sort((a,b) => b.value - a.value);
+
+    const totalValue = allContracts.reduce((s,c) => s + (parseFloat(c.contract_value) || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        total: allContracts.length,
+        totalValue,
+        statusWise: Object.values(statusMap),
+        expiring30: expiring30.map(c => ({ ...c, contract_value: parseFloat(c.contract_value) })),
+        expiring60: expiring60.map(c => ({ ...c, contract_value: parseFloat(c.contract_value) })),
+        expiring90: expiring90.map(c => ({ ...c, contract_value: parseFloat(c.contract_value) })),
+        vendorWise,
+        allContracts: allContracts.map(c => ({ ...c, contract_value: parseFloat(c.contract_value) || 0 }))
+      }
+    });
+  } catch (error) {
+    console.error('Contract report error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /reports/maintenance (assets under maintenance)
+router.get('/maintenance', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const where = { status: 'maintenance' };
+    if (from || to) Object.assign(where, dateWhere('updated_at', from, to));
+
+    const assets = await models.Asset.findAll({
+      attributes: ['asset_tag', 'asset_name', 'category', 'sub_type', 'assigned_to', 'updated_at'],
+      where,
+      order: [['updated_at', 'DESC']],
+      raw: true
+    });
+
+    // Sub-type wise maintenance breakdown
+    const subTypeMap = {};
+    assets.forEach(a => {
+      if (!subTypeMap[a.sub_type]) subTypeMap[a.sub_type] = 0;
+      subTypeMap[a.sub_type]++;
+    });
+    const subTypeWise = Object.entries(subTypeMap).map(([name, count]) => ({ name, count }))
+      .sort((a,b) => b.count - a.count);
+
+    // Category-wise
+    const categoryMap = {};
+    assets.forEach(a => {
+      if (!categoryMap[a.category]) categoryMap[a.category] = 0;
+      categoryMap[a.category]++;
+    });
+    const categoryWise = Object.entries(categoryMap).map(([name, count]) => ({ name, count }));
+
+    res.json({
+      success: true,
+      data: {
+        total: assets.length,
+        assets,
+        subTypeWise,
+        categoryWise
+      }
+    });
+  } catch (error) {
+    console.error('Maintenance report error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /reports/frequently-requested
+router.get('/frequently-requested', async (req, res) => {
+  try {
+    // Most assigned sub_types
+    const mostAssigned = await models.Asset.findAll({
+      attributes: ['sub_type', 'category', [fn('COUNT', col('id')), 'count']],
+      where: { assigned_to: { [Op.not]: null, [Op.ne]: '' } },
+      group: ['sub_type', 'category'],
+      order: [[fn('COUNT', col('id')), 'DESC']],
+      limit: 10,
+      raw: true
+    });
+
+    // Per-user asset counts
+    const perUser = await models.Asset.findAll({
+      attributes: ['assigned_to', [fn('COUNT', col('id')), 'count']],
+      where: { assigned_to: { [Op.not]: null, [Op.ne]: '' } },
+      group: ['assigned_to'],
+      order: [[fn('COUNT', col('id')), 'DESC']],
+      limit: 10,
+      raw: true
+    });
+
+    // Category demand
+    const categoryDemand = await models.Asset.findAll({
+      attributes: ['category', [fn('COUNT', col('id')), 'count']],
+      where: { assigned_to: { [Op.not]: null, [Op.ne]: '' } },
+      group: ['category'],
+      raw: true
+    });
+
+    res.json({
+      success: true,
+      data: {
+        mostAssigned: mostAssigned.map(r => ({ name: r.sub_type, category: r.category, count: parseInt(r.count) })),
+        perUser: perUser.map(r => ({ name: r.assigned_to, count: parseInt(r.count) })),
+        categoryDemand: categoryDemand.map(r => ({ name: r.category, count: parseInt(r.count) }))
+      }
+    });
+  } catch (error) {
+    console.error('Frequently requested error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 module.exports = router;
