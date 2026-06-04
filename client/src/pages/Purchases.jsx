@@ -349,26 +349,7 @@ export const Purchases = () => {
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <button onClick={handleUploadInvoice} className="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition text-sm">
-                  📄 Upload Invoice
-                </button>
-                <button onClick={handleRegisterWarranty} className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium transition text-sm">
-                  ✅ Register Warranty
-                </button>
-                <button onClick={handleExportAnalytics} className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 font-medium transition text-sm">
-                  📊 Export Report
-                </button>
-                <button onClick={() => setActiveTab('vendors')} className="bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 font-medium transition text-sm">
-                  🏢 View Vendors
-                </button>
-              </div>
-            </div>
-
-            {/* Recent Purchases */}
+            {/* All Purchases */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">All Purchases ({mockPurchases.length})</h3>
               <div className="overflow-x-auto">
