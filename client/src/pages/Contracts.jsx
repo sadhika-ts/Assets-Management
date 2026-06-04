@@ -152,7 +152,6 @@ export const Contracts = () => {
   });
 
   const handleAddContract = () => {
-    toast.success('Create new contract');
     navigate('/contracts/new');
   };
 

@@ -160,7 +160,6 @@ router.post(
   /* verifyToken, */  // DISABLED FOR DEVELOPMENT
   /* requireRole('admin'), */  // DISABLED FOR DEVELOPMENT
   [
-    body('contract_id').trim().notEmpty().withMessage('Contract ID is required'),
     body('contract_name').trim().notEmpty().withMessage('Contract name is required'),
     body('vendor_name').trim().notEmpty().withMessage('Vendor name is required'),
     body('vendor_contact').optional({ checkFalsy: true }).trim(),
@@ -171,7 +170,6 @@ router.post(
     body('active_from').isISO8601().toDate().withMessage('Invalid active_from date'),
     body('active_till').isISO8601().toDate().withMessage('Invalid active_till date'),
     body('contract_value').optional({ checkFalsy: true }).isFloat({ min: 0 }).toFloat(),
-    body('status').optional({ checkFalsy: true }).isIn(['active', 'expired', 'upcoming', 'expiring_soon']).withMessage('Invalid status'),
     body('description').optional({ checkFalsy: true }).trim()
   ],
   async (req, res) => {
@@ -195,7 +193,7 @@ router.post(
       }
       console.log('✓ Validation passed');
 
-      const { contract_id, contract_name, vendor_name, vendor_contact, vendor_email, vendor_phone, vendor_address, vendor_contact_person, active_from, active_till, contract_value, status, description } = req.body;
+      const { contract_name, vendor_name, vendor_contact, vendor_email, vendor_phone, vendor_address, vendor_contact_person, active_from, active_till, contract_value, description } = req.body;
 
       if (new Date(active_from) >= new Date(active_till)) {
         await transaction.rollback();
@@ -206,32 +204,36 @@ router.post(
         });
       }
 
-      const existingContract = await models.Contract.findOne({
-        where: { contract_id },
+      // Auto-generate unique contract_id (CON-0001, CON-0002, ...)
+      const allContracts = await models.Contract.findAll({
+        attributes: ['contract_id'],
         transaction
       });
-
-      if (existingContract) {
-        await transaction.rollback();
-        return res.status(409).json({
-          success: false,
-          error: 'Contract already exists',
-          message: 'A contract with this ID already exists.'
-        });
-      }
+      let maxNum = 0;
+      allContracts.forEach(c => {
+        const match = c.contract_id && c.contract_id.match(/^CON-(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+      const contract_id = `CON-${String(maxNum + 1).padStart(4, '0')}`;
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const activeFrom = new Date(active_from);
       activeFrom.setHours(0, 0, 0, 0);
+      const activeTill = new Date(active_till);
+      activeTill.setHours(0, 0, 0, 0);
 
-      let finalStatus = status;
-      if (!status) {
-        if (activeFrom > today) {
-          finalStatus = 'upcoming';
-        } else {
-          finalStatus = 'active';
-        }
+      let finalStatus;
+      if (activeTill < today) {
+        finalStatus = 'expired';
+      } else if (activeFrom > today) {
+        finalStatus = 'upcoming';
+      } else {
+        const daysLeft = Math.ceil((activeTill - today) / (1000 * 60 * 60 * 24));
+        finalStatus = daysLeft <= 30 ? 'expiring_soon' : 'active';
       }
 
       console.log('Creating contract with data:', {
