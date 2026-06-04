@@ -255,12 +255,6 @@ export const Purchases = () => {
             📊 Overview
           </button>
           <button
-            onClick={() => setActiveTab('purchases')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'purchases' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📦 Purchases
-          </button>
-          <button
             onClick={() => setActiveTab('vendors')}
             className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'vendors' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
           >
@@ -362,98 +356,6 @@ export const Purchases = () => {
         )}
 
         {/* PURCHASES TAB */}
-        {activeTab === 'purchases' && (
-          <div className="space-y-6">
-            {/* Search & Filter */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Search Purchases</label>
-                  <input
-                    type="text"
-                    placeholder="Search by PO ID or vendor..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="ordered">Ordered</option>
-                    <option value="shipped">Shipped</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* View Toggle */}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium transition"
-              >
-                {viewMode === 'card' ? '📋 List View' : '⊞ Card View'}
-              </button>
-            </div>
-
-            {/* Purchases Display */}
-            {viewMode === 'card' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredPurchases.map(purchase => (
-                  <PurchaseCard
-                    key={purchase.id}
-                    purchase={purchase}
-                    onView={handleViewPurchase}
-                    onDelete={handleDeletePurchase}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm p-6 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">PO ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Invoice</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredPurchases.map(purchase => (
-                      <tr key={purchase.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 font-medium text-gray-900">{purchase.purchase_id}</td>
-                        <td className="px-6 py-4 text-gray-700">{purchase.vendor_name}</td>
-                        <td className="px-6 py-4 text-gray-700">{purchase.purchase_date}</td>
-                        <td className="px-6 py-4 text-gray-700">{purchase.invoice_number}</td>
-                        <td className="px-6 py-4 font-medium text-gray-900">₹{(purchase.total_amount / 100000).toFixed(2)}L</td>
-                        <td className="px-6 py-4"><StatusBadge status={purchase.status} /></td>
-                        <td className="px-6 py-4">
-                          <div className="flex gap-2">
-                            <button onClick={() => handleViewPurchase(purchase.id)} className="text-blue-600 hover:text-blue-800 font-medium">View</button>
-                            <button onClick={() => handleDeletePurchase(purchase.id, purchase.purchase_id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* VENDORS TAB */}
         {activeTab === 'vendors' && (
