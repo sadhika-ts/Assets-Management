@@ -252,12 +252,6 @@ export const Contracts = () => {
             📊 Overview
           </button>
           <button
-            onClick={() => setActiveTab('contracts')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'contracts' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📋 Contracts
-          </button>
-          <button
             onClick={() => setActiveTab('analytics')}
             className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'analytics' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
           >
@@ -292,9 +286,30 @@ export const Contracts = () => {
               <p className="text-blue-100 mt-2">Across {mockContracts.length} contracts</p>
             </div>
 
-            {/* Recent Expiring Contracts */}
+            {/* All Contracts Table */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Contracts Expiring Soon</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">All Contracts ({mockContracts.length})</h3>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    placeholder="Search by name or vendor..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expiring_soon">Expiring Soon</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
@@ -302,114 +317,31 @@ export const Contracts = () => {
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Contract ID</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Expires</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Days Left</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {mockContracts.filter(c => c.status !== 'expired' && c.status !== 'active').map(contract => {
-                      const daysLeft = Math.ceil((new Date(contract.active_till) - new Date()) / (1000 * 60 * 60 * 24));
-                      return (
-                        <tr key={contract.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 font-medium text-gray-900">{contract.contract_id}</td>
-                          <td className="px-6 py-4 text-gray-700">{contract.contract_name}</td>
-                          <td className="px-6 py-4 text-gray-700">{contract.vendor_name}</td>
-                          <td className="px-6 py-4 text-gray-700">{new Date(contract.active_till).toLocaleDateString('en-IN')}</td>
-                          <td className="px-6 py-4"><span className={daysLeft > 0 ? 'text-orange-600 font-semibold' : 'text-red-600 font-semibold'}>{daysLeft > 0 ? daysLeft : 'Expired'}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CONTRACTS TAB */}
-        {activeTab === 'contracts' && (
-          <div className="space-y-6">
-            {/* Search & Filter */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Search Contracts</label>
-                  <input
-                    type="text"
-                    placeholder="Search by name or vendor..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="expiring_soon">Expiring Soon</option>
-                    <option value="expired">Expired</option>
-                    <option value="renewal_due">Renewal Due</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* View Toggle */}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium transition"
-              >
-                {viewMode === 'card' ? '📋 List View' : '⊞ Card View'}
-              </button>
-            </div>
-
-            {/* Contracts Display */}
-            {viewMode === 'card' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredContracts.map(contract => (
-                  <ContractCard
-                    key={contract.id}
-                    contract={contract}
-                    onView={handleViewContract}
-                    onRenew={handleRenewContract}
-                    onDelete={handleDeleteContract}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm p-6 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Contract ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Value</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Active From</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Expires</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredContracts.map(contract => (
+                    {filteredContracts.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="px-6 py-8 text-center text-gray-500">No contracts found</td>
+                      </tr>
+                    ) : filteredContracts.map(contract => (
                       <tr key={contract.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 font-medium text-gray-900">{contract.contract_id}</td>
                         <td className="px-6 py-4 text-gray-700">{contract.contract_name}</td>
                         <td className="px-6 py-4 text-gray-700">{contract.vendor_name}</td>
                         <td className="px-6 py-4 font-medium text-gray-900">₹{(parseFloat(contract.contract_value) || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-gray-700">{new Date(contract.active_from).toLocaleDateString('en-IN')}</td>
                         <td className="px-6 py-4 text-gray-700">{new Date(contract.active_till).toLocaleDateString('en-IN')}</td>
                         <td className="px-6 py-4"><StatusBadge status={contract.status} /></td>
                         <td className="px-6 py-4">
                           <div className="flex gap-2">
-                            <button onClick={() => handleViewContract(contract.id)} className="text-blue-600 hover:text-blue-800 font-medium">View</button>
-                            <button onClick={() => handleRenewContract(contract.id, contract.contract_id)} className="text-green-600 hover:text-green-800 font-medium">Renew</button>
-                            <button onClick={() => handleDeleteContract(contract.id, contract.contract_id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                            <button onClick={() => handleRenewContract(contract.id, contract.contract_id)} className="text-green-600 hover:text-green-800 font-medium text-xs">Renew</button>
+                            <button onClick={() => handleDeleteContract(contract.id, contract.contract_id)} className="text-red-600 hover:text-red-800 font-medium text-xs">Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -417,7 +349,7 @@ export const Contracts = () => {
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
           </div>
         )}
 
