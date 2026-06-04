@@ -160,8 +160,13 @@ export const AssetForm = () => {
         // Set static user list and fetch purchases
         setUsers(userList);
 
-        const purchasesRes = await api.get('/purchases');
-        setPurchases(purchasesRes.data.data.purchases || []);
+        const purchasesRes = await api.get('/purchases?limit=500');
+        // Sort by date descending and take last 10
+        const allPurchases = purchasesRes.data.data.purchases || [];
+        const recentPurchases = allPurchases
+          .sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date))
+          .slice(0, 10);
+        setPurchases(recentPurchases);
 
         // Fetch asset if editing
         if (isEditMode) {
@@ -580,9 +585,11 @@ export const AssetForm = () => {
               </div>
             )}
 
-            {/* Purchase Dropdown */}
+            {/* Purchase Dropdown - Shows Last 10 Recent Purchases */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Purchase</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Purchase <span className="text-xs text-gray-500">(Last 10 Recent)</span>
+              </label>
               <Controller
                 name="purchase_id"
                 control={control}
@@ -592,14 +599,21 @@ export const AssetForm = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select a purchase</option>
-                    {purchases.map((purchase) => (
-                      <option key={purchase.id} value={purchase.id}>
-                        {purchase.description || `Purchase #${purchase.id}`}
-                      </option>
-                    ))}
+                    {purchases.map((purchase) => {
+                      const purchaseDate = new Date(purchase.purchase_date).toLocaleDateString('en-IN');
+                      const displayText = `${purchase.purchase_id} - ${purchase.vendor_name} (${purchaseDate}) - ₹${parseFloat(purchase.total_amount).toLocaleString()}`;
+                      return (
+                        <option key={purchase.id} value={purchase.id}>
+                          {displayText}
+                        </option>
+                      );
+                    })}
                   </select>
                 )}
               />
+              {purchases.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">No purchases available. Create a purchase order first.</p>
+              )}
             </div>
 
             {/* Assigned To Dropdown - Disabled for Inactive/Disposed */}
