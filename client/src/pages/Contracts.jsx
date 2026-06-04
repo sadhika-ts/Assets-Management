@@ -34,9 +34,9 @@ const ContractCard = ({ contract, onView, onRenew, onDelete }) => {
 
       <div className="space-y-2 text-sm text-gray-700 mb-4 border-b border-gray-200 pb-4">
         <p><strong>Vendor:</strong> {contract.vendor_name}</p>
-        <p><strong>Value:</strong> ₹{contract.contract_value.toLocaleString()}</p>
-        <p><strong>Active:</strong> {contract.active_from}</p>
-        <p><strong>Expires:</strong> {contract.active_till}</p>
+        <p><strong>Value:</strong> ₹{(parseFloat(contract.contract_value) || 0).toLocaleString()}</p>
+        <p><strong>Active:</strong> {new Date(contract.active_from).toLocaleDateString('en-IN')}</p>
+        <p><strong>Expires:</strong> {new Date(contract.active_till).toLocaleDateString('en-IN')}</p>
         {daysUntilExpiry > 0 && <p className={isExpiringSoon ? 'text-orange-600 font-semibold' : 'text-gray-600'}><strong>Days Left:</strong> {daysUntilExpiry} days</p>}
         {isExpired && <p className="text-red-600 font-semibold"><strong>Status:</strong> Expired {Math.abs(daysUntilExpiry)} days ago</p>}
       </div>
@@ -285,7 +285,10 @@ export const Contracts = () => {
             {/* Total Contract Value */}
             <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-8 rounded-lg shadow-lg">
               <h3 className="text-2xl font-bold mb-2">Total Contract Value</h3>
-              <p className="text-4xl font-bold">₹{(mockContracts.reduce((sum, c) => sum + c.contract_value, 0) / 100000).toFixed(1)}L</p>
+              <p className="text-4xl font-bold">₹{(() => {
+                const total = mockContracts.reduce((sum, c) => sum + (parseFloat(c.contract_value) || 0), 0);
+                return total >= 100000 ? (total / 100000).toFixed(1) + 'L' : total.toLocaleString();
+              })()}</p>
               <p className="text-blue-100 mt-2">Across {mockContracts.length} contracts</p>
             </div>
 
@@ -342,7 +345,7 @@ export const Contracts = () => {
                           <td className="px-6 py-4 font-medium text-gray-900">{contract.contract_id}</td>
                           <td className="px-6 py-4 text-gray-700">{contract.contract_name}</td>
                           <td className="px-6 py-4 text-gray-700">{contract.vendor_name}</td>
-                          <td className="px-6 py-4 text-gray-700">{contract.active_till}</td>
+                          <td className="px-6 py-4 text-gray-700">{new Date(contract.active_till).toLocaleDateString('en-IN')}</td>
                           <td className="px-6 py-4"><span className={daysLeft > 0 ? 'text-orange-600 font-semibold' : 'text-red-600 font-semibold'}>{daysLeft > 0 ? daysLeft : 'Expired'}</span></td>
                         </tr>
                       );
@@ -430,8 +433,8 @@ export const Contracts = () => {
                         <td className="px-6 py-4 font-medium text-gray-900">{contract.contract_id}</td>
                         <td className="px-6 py-4 text-gray-700">{contract.contract_name}</td>
                         <td className="px-6 py-4 text-gray-700">{contract.vendor_name}</td>
-                        <td className="px-6 py-4 font-medium text-gray-900">₹{(contract.contract_value / 100000).toFixed(2)}L</td>
-                        <td className="px-6 py-4 text-gray-700">{contract.active_till}</td>
+                        <td className="px-6 py-4 font-medium text-gray-900">₹{(parseFloat(contract.contract_value) || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-gray-700">{new Date(contract.active_till).toLocaleDateString('en-IN')}</td>
                         <td className="px-6 py-4"><StatusBadge status={contract.status} /></td>
                         <td className="px-6 py-4">
                           <div className="flex gap-2">
