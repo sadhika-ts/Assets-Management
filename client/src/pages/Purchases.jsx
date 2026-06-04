@@ -118,11 +118,20 @@ export const Purchases = () => {
       console.log('✅ Fetched purchases:', purchases.length);
       setMockPurchases(purchases);
 
-      // Extract unique vendors from purchases
+      // Extract unique vendors from purchases - exclude test vendors
       const uniqueVendors = [];
       const vendorMap = new Map();
 
+      // List of test vendor keywords to exclude
+      const testKeywords = ['test', 'demo', 'sample', 'validation', 'zero', 'decimal', 'dashboard', 'autogen', 'large'];
+
       purchases.forEach(purchase => {
+        // Skip test vendors
+        const vendorNameLower = purchase.vendor_name.toLowerCase();
+        const isTestVendor = testKeywords.some(keyword => vendorNameLower.includes(keyword));
+
+        if (isTestVendor) return; // Skip this vendor
+
         if (!vendorMap.has(purchase.vendor_name)) {
           vendorMap.set(purchase.vendor_name, {
             id: purchase.vendor_name,
@@ -131,8 +140,7 @@ export const Purchases = () => {
             email: purchase.vendor_email || 'N/A',
             address: purchase.vendor_address || 'N/A',
             totalPurchases: 1,
-            totalSpent: parseFloat(purchase.total_amount) || 0,
-            rating: 4.5
+            totalSpent: parseFloat(purchase.total_amount) || 0
           });
         } else {
           const vendor = vendorMap.get(purchase.vendor_name);
@@ -449,15 +457,33 @@ export const Purchases = () => {
 
         {/* VENDORS TAB */}
         {activeTab === 'vendors' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mockVendors.map(vendor => (
-                <VendorCard
-                  key={vendor.id}
-                  vendor={vendor}
-                  onView={handleViewPurchase}
-                />
-              ))}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">All Vendors ({mockVendors.length})</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Contact</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Address</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Total Orders</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Total Spent</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {mockVendors.map(vendor => (
+                    <tr key={vendor.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-medium text-gray-900">{vendor.name}</td>
+                      <td className="px-6 py-4 text-gray-700">{vendor.contact}</td>
+                      <td className="px-6 py-4 text-gray-700">{vendor.email}</td>
+                      <td className="px-6 py-4 text-gray-700">{vendor.address}</td>
+                      <td className="px-6 py-4 text-gray-700">{vendor.totalPurchases}</td>
+                      <td className="px-6 py-4 font-medium text-gray-900">₹{(vendor.totalSpent >= 100000) ? (vendor.totalSpent / 100000).toFixed(2) + 'L' : vendor.totalSpent.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
