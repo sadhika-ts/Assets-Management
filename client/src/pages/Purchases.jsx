@@ -5,16 +5,71 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, X
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 
-// Status Badge
+// Status Badge (read-only, used in analytics)
 const StatusBadge = ({ status }) => {
   const styles = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    ordered: 'bg-blue-100 text-blue-800',
-    shipped: 'bg-purple-100 text-purple-800',
-    delivered: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800'
+    pending:   'bg-yellow-100 text-yellow-800',
+    ordered:   'bg-blue-100 text-blue-800',
+    received:  'bg-green-100 text-green-800',
+    cancelled: 'bg-red-100 text-red-800',
   };
-  return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${styles[status] || styles.pending}`}>{status}</span>;
+  return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${styles[status] || 'bg-gray-100 text-gray-700'}`}>{status}</span>;
+};
+
+const STATUS_OPTIONS = ['pending', 'ordered', 'received', 'cancelled'];
+
+// Which options are available from each current status
+const STATUS_TRANSITIONS = {
+  pending:   ['pending', 'ordered', 'received', 'cancelled'],
+  ordered:   ['ordered', 'received', 'cancelled'],
+  received:  null,   // terminal — no changes allowed
+  cancelled: null,   // terminal — no changes allowed
+};
+
+const STATUS_STYLES = {
+  pending:   'bg-yellow-100 text-yellow-800 border-yellow-200',
+  ordered:   'bg-blue-100 text-blue-800 border-blue-200',
+  received:  'bg-green-100 text-green-800 border-green-200',
+  cancelled: 'bg-red-100 text-red-800 border-red-200',
+};
+
+// Inline editable status dropdown
+const StatusDropdown = ({ purchase, onStatusChange, updating }) => {
+  const style = STATUS_STYLES[purchase.status] || 'bg-gray-100 text-gray-700 border-gray-200';
+  const options = STATUS_TRANSITIONS[purchase.status];
+
+  if (updating) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-gray-500">
+        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+        </svg>
+        Saving…
+      </span>
+    );
+  }
+
+  // Terminal statuses — show plain badge, no dropdown
+  if (!options) {
+    return (
+      <span className={`text-xs font-semibold rounded-full px-3 py-1 border ${style}`}>
+        {purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1)}
+      </span>
+    );
+  }
+
+  return (
+    <select
+      value={purchase.status}
+      onChange={e => onStatusChange(purchase.id, e.target.value)}
+      className={`text-xs font-semibold rounded-full px-3 py-1 border cursor-pointer appearance-none pr-6 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400 ${style}`}
+    >
+      {options.map(s => (
+        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+      ))}
+    </select>
+  );
 };
 
 // Vendor Card
@@ -93,6 +148,7 @@ export const Purchases = () => {
   const [mockPurchases, setMockPurchases] = useState([]);
   const [mockVendors, setMockVendors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
     const shouldRefresh = searchParams.get('refresh') === 'true';
@@ -140,12 +196,12 @@ export const Purchases = () => {
             email: purchase.vendor_email || 'N/A',
             address: purchase.vendor_address || 'N/A',
             totalPurchases: 1,
-            totalSpent: parseFloat(purchase.total_amount) || 0
+            totalSpent: purchase.status !== 'cancelled' ? (parseFloat(purchase.total_amount) || 0) : 0
           });
         } else {
           const vendor = vendorMap.get(purchase.vendor_name);
           vendor.totalPurchases += 1;
-          vendor.totalSpent += parseFloat(purchase.total_amount) || 0;
+          if (purchase.status !== 'cancelled') vendor.totalSpent += parseFloat(purchase.total_amount) || 0;
         }
       });
 
@@ -176,7 +232,7 @@ export const Purchases = () => {
         trendMap.set(monthKey, { month: monthLabel, amount: 0, count: 0 });
       }
       const entry = trendMap.get(monthKey);
-      entry.amount += parseFloat(purchase.total_amount) || 0;
+      if (purchase.status !== 'cancelled') entry.amount += parseFloat(purchase.total_amount) || 0;
       entry.count += 1;
     });
     return Array.from(trendMap.values()).sort((a, b) => a.month.localeCompare(b.month));
@@ -185,7 +241,7 @@ export const Purchases = () => {
   // Generate Status Distribution Data
   const categoryDistribution = (() => {
     const statusMap = new Map();
-    const colors = { pending: '#FFA500', ordered: '#3b82f6', delivered: '#22c55e', cancelled: '#ef4444' };
+    const colors = { pending: '#FFA500', ordered: '#3b82f6', received: '#22c55e', cancelled: '#ef4444' };
 
     mockPurchases.forEach(purchase => {
       if (!statusMap.has(purchase.status)) {
@@ -209,7 +265,7 @@ export const Purchases = () => {
         vendorMap.set(purchase.vendor_name, { name: purchase.vendor_name, spent: 0, orders: 0 });
       }
       const vendor = vendorMap.get(purchase.vendor_name);
-      vendor.spent += parseFloat(purchase.total_amount) || 0;
+      if (purchase.status !== 'cancelled') vendor.spent += parseFloat(purchase.total_amount) || 0;
       vendor.orders += 1;
     });
     return Array.from(vendorMap.values())
@@ -224,6 +280,21 @@ export const Purchases = () => {
     const matchesStatus = filterStatus === 'all' || purchase.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+
+  const handleStatusChange = async (purchaseId, newStatus) => {
+    setUpdatingId(purchaseId);
+    try {
+      await api.put(`/purchases/${purchaseId}`, { status: newStatus });
+      setMockPurchases(prev =>
+        prev.map(p => p.id === purchaseId ? { ...p, status: newStatus } : p)
+      );
+      toast.success(`Status updated to "${newStatus}"`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update status');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const handleAddPurchase = () => {
     navigate('/purchases/new');
@@ -328,10 +399,12 @@ export const Purchases = () => {
               <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500">
                 <p className="text-gray-600 text-sm font-medium">Total Spent</p>
                 <p className="text-3xl font-bold text-green-700 mt-2">₹{(() => {
-                  const total = mockPurchases.reduce((sum, p) => {
-                    const amount = typeof p.total_amount === 'string' ? parseFloat(p.total_amount) : p.total_amount;
-                    return sum + (isNaN(amount) ? 0 : amount);
-                  }, 0);
+                  const total = mockPurchases
+                    .filter(p => p.status !== 'cancelled')
+                    .reduce((sum, p) => {
+                      const amount = parseFloat(p.total_amount);
+                      return sum + (isNaN(amount) ? 0 : amount);
+                    }, 0);
                   return (total >= 100000) ? (total / 100000).toFixed(1) + 'L' : total.toLocaleString();
                 })()}</p>
               </div>
@@ -344,14 +417,35 @@ export const Purchases = () => {
                 <p className="text-3xl font-bold text-orange-700 mt-2">{mockPurchases.filter(p => p.status === 'pending').length}</p>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-cyan-500">
-                <p className="text-gray-600 text-sm font-medium">Delivered</p>
-                <p className="text-3xl font-bold text-cyan-700 mt-2">{mockPurchases.filter(p => p.status === 'delivered').length}</p>
+                <p className="text-gray-600 text-sm font-medium">Received</p>
+                <p className="text-3xl font-bold text-cyan-700 mt-2">{mockPurchases.filter(p => p.status === 'received').length}</p>
               </div>
             </div>
 
             {/* All Purchases */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">All Purchases ({mockPurchases.length})</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">All Purchases ({filteredPurchases.length})</h3>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Search PO or vendor…"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <select
+                    value={filterStatus}
+                    onChange={e => setFilterStatus(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    {STATUS_OPTIONS.map(s => (
+                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
@@ -364,16 +458,24 @@ export const Purchases = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {mockPurchases.map(purchase => {
-                      const amount = typeof purchase.total_amount === 'string' ? parseFloat(purchase.total_amount) : purchase.total_amount;
-                      const formattedAmount = (amount >= 100000) ? (amount / 100000).toFixed(2) + 'L' : amount.toLocaleString();
+                    {filteredPurchases.length === 0 ? (
+                      <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">No purchases found</td></tr>
+                    ) : filteredPurchases.map(purchase => {
+                      const amount = parseFloat(purchase.total_amount) || 0;
+                      const formattedAmount = amount >= 100000 ? (amount / 100000).toFixed(2) + 'L' : amount.toLocaleString();
                       return (
                         <tr key={purchase.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 font-medium text-gray-900">{purchase.purchase_id}</td>
+                          <td className="px-6 py-4 font-mono font-semibold text-blue-600">{purchase.purchase_id}</td>
                           <td className="px-6 py-4 text-gray-700">{purchase.vendor_name}</td>
-                          <td className="px-6 py-4 text-gray-700">{new Date(purchase.purchase_date).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 text-gray-600">{new Date(purchase.purchase_date).toLocaleDateString('en-IN')}</td>
                           <td className="px-6 py-4 font-medium text-gray-900">₹{formattedAmount}</td>
-                          <td className="px-6 py-4"><StatusBadge status={purchase.status} /></td>
+                          <td className="px-6 py-4">
+                            <StatusDropdown
+                              purchase={purchase}
+                              onStatusChange={handleStatusChange}
+                              updating={updatingId === purchase.id}
+                            />
+                          </td>
                         </tr>
                       );
                     })}
@@ -485,11 +587,12 @@ export const Purchases = () => {
                 <div className="space-y-3 text-sm">
                   <p>Total Purchases: <strong>{mockPurchases.length}</strong> orders</p>
                   <p>Total Amount: <strong>₹{(() => {
-                    const total = mockPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
+                    const total = mockPurchases.filter(p => p.status !== 'cancelled').reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
                     return (total >= 100000) ? (total / 100000).toFixed(1) + 'L' : total.toLocaleString();
                   })()}</strong></p>
                   <p>Avg Order: <strong>₹{(() => {
-                    const avg = mockPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0) / mockPurchases.length;
+                    const valid = mockPurchases.filter(p => p.status !== 'cancelled');
+                    const avg = valid.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0) / (valid.length || 1);
                     return (avg >= 100000) ? (avg / 100000).toFixed(2) + 'L' : Math.round(avg).toLocaleString();
                   })()}</strong></p>
                   <p>Top Vendor: <strong>{vendorPerformanceData[0]?.name || 'N/A'}</strong></p>
@@ -499,7 +602,7 @@ export const Purchases = () => {
               <div className="bg-gradient-to-br from-green-600 to-green-700 text-white p-6 rounded-lg">
                 <h3 className="text-lg font-semibold mb-4">🎯 Status Breakdown</h3>
                 <div className="space-y-3 text-sm">
-                  <p>✅ Delivered: <strong>{mockPurchases.filter(p => p.status === 'delivered').length}</strong></p>
+                  <p>✅ Received: <strong>{mockPurchases.filter(p => p.status === 'received').length}</strong></p>
                   <p>📦 Shipped: <strong>{mockPurchases.filter(p => p.status === 'shipped').length}</strong></p>
                   <p>📋 Ordered: <strong>{mockPurchases.filter(p => p.status === 'ordered').length}</strong></p>
                   <p>⏳ Pending: <strong>{mockPurchases.filter(p => p.status === 'pending').length}</strong></p>

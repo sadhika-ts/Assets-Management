@@ -171,15 +171,16 @@ export const AssetForm = () => {
         // Fetch asset if editing
         if (isEditMode) {
           const assetRes = await api.get(`/assets/${id}`);
-          const asset = assetRes.data.data;
+          const asset = assetRes.data.data?.asset || assetRes.data.data;
 
           reset({
             asset_tag: asset.asset_tag,
+            asset_name: asset.asset_name || '',
             category: asset.category,
             sub_type: asset.sub_type,
             other_subtype_description: asset.other_subtype_description || '',
-            serial_no: asset.detail?.serial_no || '',
-            mac_address: asset.detail?.mac_address || '',
+            serial_no: asset.serial_no || asset.detail?.serial_no || '',
+            mac_address: asset.mac_address || asset.detail?.mac_address || '',
             status: asset.status,
             purchase_id: asset.purchase_id || '',
             assigned_to: asset.assigned_to || '',
@@ -324,13 +325,13 @@ export const AssetForm = () => {
         console.log('Update response:', response.data);
 
         setToast({
-          message: '✅ Data stored successfully - Asset updated',
+          message: '✅ Asset updated successfully',
           type: 'success'
         });
 
         setTimeout(() => {
-          navigate(`/assets/${id}`);
-        }, 2000);
+          navigate('/assets');
+        }, 1500);
       } else {
         console.log('Creating new asset');
         const response = await api.post('/assets', payload);
@@ -513,7 +514,8 @@ export const AssetForm = () => {
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
-                    <option value="disposed">Disposed</option>
+                    <option value="retired">Retired</option>
+
                   </select>
                 )}
               />

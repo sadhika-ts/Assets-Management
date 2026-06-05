@@ -7,12 +7,16 @@ import api from '../api/axios';
 // Status Badge
 const StatusBadge = ({ status }) => {
   const styles = {
-    available: 'bg-green-100 text-green-800',
-    assigned: 'bg-blue-100 text-blue-800',
-    repair: 'bg-orange-100 text-orange-800',
-    retired: 'bg-red-100 text-red-800'
+    active:   'bg-green-100 text-green-700',
+    inactive: 'bg-red-100 text-red-700',
+    retired:  'bg-gray-100 text-gray-600',
   };
-  return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${styles[status] || styles.available}`}>{status}</span>;
+  const label = status?.replace('_', ' ') || status;
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${styles[status] || 'bg-gray-100 text-gray-600'}`}>
+      {label}
+    </span>
+  );
 };
 
 // Filter Card
@@ -29,7 +33,7 @@ const FilterCard = ({ title, icon, count }) => (
 );
 
 // Asset Card (Grid View)
-const AssetCard = ({ asset, onView, onEdit, onDelete }) => (
+const AssetCard = ({ asset, onView, onEdit }) => (
   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all">
     <div className="flex justify-between items-start mb-4">
       <div>
@@ -42,8 +46,8 @@ const AssetCard = ({ asset, onView, onEdit, onDelete }) => (
     <div className="space-y-2 text-sm text-gray-700 mb-4 border-b border-gray-200 pb-4">
       <p><strong>Category:</strong> {asset.category}</p>
       <p><strong>Type:</strong> {asset.sub_type}</p>
-      <p><strong>Serial:</strong> {asset.detail?.serial_no || 'N/A'}</p>
-      <p><strong>Assigned:</strong> {asset.assigned_to || 'Unassigned'}</p>
+      <p><strong>Serial:</strong> {asset.serial_no || asset.detail?.serial_no || 'N/A'}</p>
+      <p><strong>Assigned:</strong> {displayAssignee(asset.assigned_to) === '—' ? 'Unassigned' : displayAssignee(asset.assigned_to)}</p>
     </div>
 
     <div className="flex gap-2">
@@ -53,20 +57,18 @@ const AssetCard = ({ asset, onView, onEdit, onDelete }) => (
       <button onClick={() => onEdit(asset.id)} className="flex-1 bg-green-500 text-white py-2 rounded hover:bg-green-600 transition text-sm font-medium">
         Edit
       </button>
-      <button onClick={() => onDelete(asset.id, asset.asset_tag)} className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 transition text-sm font-medium">
-        Delete
-      </button>
     </div>
   </div>
 );
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const displayAssignee = (val) => (!val || UUID_RE.test(val) ? '—' : val);
 
 export const Assets = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState('list');
   const [activeTab, setActiveTab] = useState('overview');
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -108,20 +110,19 @@ export const Assets = () => {
     }
   };
 
+  // Dynamic sub_type options from actual data
+  const subTypeOptions = [...new Set(mockAssets.map(a => a.sub_type).filter(Boolean))].sort();
+
   // Filter assets
   const filteredAssets = mockAssets.filter(asset => {
-    const matchesSearch = asset.asset_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.asset_tag.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      asset.asset_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.asset_tag?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.assigned_to?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || asset.sub_type === filterCategory;
     const matchesStatus = filterStatus === 'all' || asset.status === filterStatus;
     return matchesSearch && matchesCategory && matchesStatus;
   });
-
-  // Asset Categories
-  const itComponents = [
-    'Access Points', 'Computers', 'Mobile Devices', 'Printers', 'Routers',
-    'Switches', 'Scanners', 'Keyboards', 'HDMI Cables', 'USB Cables', 'Extension Ports'
-  ];
 
   const handleAddAsset = () => {
     navigate('/assets/new');
@@ -134,17 +135,6 @@ export const Assets = () => {
 
   const handleEditAsset = (id) => {
     navigate(`/assets/${id}/edit`);
-  };
-
-  const handleDeleteAsset = (id, tag) => {
-    setDeleteTarget({ id, tag });
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = () => {
-    toast.success(`Asset ${deleteTarget.tag} deleted`);
-    setShowDeleteModal(false);
-    setDeleteTarget(null);
   };
 
   const handleExportAssets = () => {
@@ -169,24 +159,6 @@ export const Assets = () => {
     toast.success('Assets exported as CSV');
   };
 
-  const handleGenerateQR = (assetTag) => {
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(assetTag)}`;
-    const link = document.createElement('a');
-    link.href = qrApiUrl;
-    link.download = `${assetTag}_qr.png`;
-    link.click();
-    toast.success(`QR Code for ${assetTag} downloaded`);
-  };
-
-  const handleGenerateBarcode = (assetTag) => {
-    const barcodeApiUrl = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(assetTag)}&code=Code128&dpi=96&print=true`;
-    const link = document.createElement('a');
-    link.href = barcodeApiUrl;
-    link.download = `${assetTag}_barcode.png`;
-    link.click();
-    toast.success(`Barcode for ${assetTag} downloaded`);
-  };
-
   return (
     <AppLayout title="Assets Management">
       <div className="space-y-6">
@@ -203,12 +175,11 @@ export const Assets = () => {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <FilterCard title="Total Assets" icon="📦" count={mockAssets.length} />
-          <FilterCard title="Available" icon="✅" count={mockAssets.filter(a => a.status === 'available').length} />
-          <FilterCard title="Assigned" icon="👤" count={mockAssets.filter(a => a.status === 'assigned').length} />
-          <FilterCard title="In Repair" icon="🔧" count={mockAssets.filter(a => a.status === 'repair').length} />
-          <FilterCard title="Retired" icon="⛔" count={mockAssets.filter(a => a.status === 'retired').length} />
+          <FilterCard title="Active" icon="✅" count={mockAssets.filter(a => a.status === 'active').length} />
+          <FilterCard title="Inactive" icon="⛔" count={mockAssets.filter(a => a.status === 'inactive').length} />
+          <FilterCard title="Retired" icon="🗑️" count={mockAssets.filter(a => a.status === 'retired').length} />
         </div>
 
         {/* Search & Filter Section */}
@@ -219,14 +190,14 @@ export const Assets = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Search Assets</label>
               <input
                 type="text"
-                placeholder="Search by name or tag..."
+                placeholder="Search by name, tag or assignee..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
-            {/* Category Filter */}
+            {/* Component Type Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Component Type</label>
               <select
@@ -235,8 +206,8 @@ export const Assets = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Types</option>
-                {itComponents.map(comp => (
-                  <option key={comp} value={comp}>{comp}</option>
+                {subTypeOptions.map(type => (
+                  <option key={type} value={type}>{type}</option>
                 ))}
               </select>
             </div>
@@ -250,9 +221,8 @@ export const Assets = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Status</option>
-                <option value="available">Available</option>
-                <option value="assigned">Assigned</option>
-                <option value="repair">In Repair</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
                 <option value="retired">Retired</option>
               </select>
             </div>
@@ -266,18 +236,6 @@ export const Assets = () => {
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium transition"
           >
             📥 Export CSV
-          </button>
-          <button
-            onClick={() => handleGenerateQR('ASSET-001')}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-medium transition"
-          >
-            📱 Generate QR Codes
-          </button>
-          <button
-            onClick={() => handleGenerateBarcode('ASSET-001')}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 font-medium transition"
-          >
-            📊 Generate Barcodes
           </button>
           <button
             onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
@@ -301,7 +259,6 @@ export const Assets = () => {
                     asset={asset}
                     onView={handleViewAsset}
                     onEdit={handleEditAsset}
-                    onDelete={handleDeleteAsset}
                   />
                 ))}
               </div>
@@ -323,17 +280,16 @@ export const Assets = () => {
                   <tbody className="divide-y divide-gray-200">
                     {filteredAssets.map(asset => (
                       <tr key={asset.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{asset.asset_tag}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700">{asset.asset_name}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700">{asset.sub_type}</td>
-                        <td className="px-6 py-4"><StatusBadge status={asset.status} /></td>
-                        <td className="px-6 py-4 text-sm text-gray-700">{asset.assigned_to || '—'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700">{asset.detail?.serial_no || '—'}</td>
+                        <td className="px-6 py-4 text-sm font-mono font-semibold text-blue-600 cursor-pointer" onClick={() => handleViewAsset(asset.id)}>{asset.asset_tag}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-800">{asset.asset_name}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{asset.sub_type}</td>
+                        <td className="px-6 py-4 w-32"><StatusBadge status={asset.status} /></td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{displayAssignee(asset.assigned_to)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">{asset.serial_no || asset.detail?.serial_no || '—'}</td>
                         <td className="px-6 py-4 text-sm">
-                          <div className="flex gap-2">
+                          <div className="flex items-center gap-3">
                             <button onClick={() => handleViewAsset(asset.id)} className="text-blue-600 hover:text-blue-800 font-medium">View</button>
                             <button onClick={() => handleEditAsset(asset.id)} className="text-green-600 hover:text-green-800 font-medium">Edit</button>
-                            <button onClick={() => handleDeleteAsset(asset.id, asset.asset_tag)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -345,31 +301,6 @@ export const Assets = () => {
           </div>
         </div>
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-lg font-bold text-gray-800 mb-2">Delete Asset</h2>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete asset <span className="font-semibold">{deleteTarget?.tag}</span>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </AppLayout>
   );

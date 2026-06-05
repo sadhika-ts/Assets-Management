@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
+import { useVendors } from '../hooks/useVendors';
+import { VendorDropdown } from '../components/VendorDropdown';
 
 export const ContractForm = () => {
   const navigate = useNavigate();
@@ -36,6 +38,19 @@ export const ContractForm = () => {
   const [documentFile, setDocumentFile] = useState(null);
   const [availableAssets, setAvailableAssets] = useState([]);
   const [generatedContractId, setGeneratedContractId] = useState(null);
+  const { vendors } = useVendors();
+
+  const handleSelectVendor = (vendor) => {
+    setFormData(prev => ({
+      ...prev,
+      vendor_name: vendor.name,
+      vendor_phone: vendor.contact || prev.vendor_phone,
+      vendor_email: vendor.email || prev.vendor_email,
+      vendor_address: vendor.address || prev.vendor_address,
+      vendor_contact_person: vendor.contact_person || prev.vendor_contact_person,
+    }));
+    setErrors(prev => ({ ...prev, vendor_name: '', vendor_phone: '', vendor_email: '' }));
+  };
 
   // Calculate remaining days
   const calculateRemainingDays = () => {
@@ -323,18 +338,19 @@ export const ContractForm = () => {
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Vendor Name */}
+              {/* Vendor Name — searchable dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Vendor Name <span className="text-red-500">*</span>
+                  {vendors.length > 0 && <span className="text-gray-400 font-normal text-xs ml-2">— select existing or type new</span>}
                 </label>
-                <input
-                  type="text"
-                  name="vendor_name"
-                  placeholder="e.g., Microsoft Corporation"
+                <VendorDropdown
+                  vendors={vendors}
                   value={formData.vendor_name}
-                  onChange={handleInputChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.vendor_name ? 'border-red-500' : 'border-gray-300'}`}
+                  onChange={val => { setFormData(p => ({ ...p, vendor_name: val })); if (errors.vendor_name) setErrors(p => ({ ...p, vendor_name: '' })); }}
+                  onSelect={handleSelectVendor}
+                  error={!!errors.vendor_name}
+                  placeholder="e.g., Microsoft Corporation"
                 />
                 {errors.vendor_name && <p className="text-red-500 text-xs mt-1">{errors.vendor_name}</p>}
               </div>

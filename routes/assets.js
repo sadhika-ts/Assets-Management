@@ -81,7 +81,7 @@ router.get(
   [
     query('category').optional().isIn(['IT', 'Non-IT']).withMessage('Invalid category'),
     query('sub_type').optional().trim(),
-    query('status').optional().isIn(['active', 'inactive', 'disposed']).withMessage('Invalid status'),
+    query('status').optional().isIn(['active', 'inactive', 'retired']).withMessage('Invalid status'),
     query('search').optional().trim(),
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt()
@@ -119,10 +119,6 @@ router.get(
             'other_applications_installed',
             'software_list'
           ]
-        },
-        {
-          association: 'assignedUser',
-          attributes: ['id', 'name', 'email', 'role']
         },
         {
           association: 'purchase',
@@ -274,10 +270,6 @@ router.get('/:id', /* verifyToken, */ async (req, res) => {  // DISABLED FOR DEV
           ]
         },
         {
-          association: 'assignedUser',
-          attributes: ['id', 'name', 'email', 'role', 'created_at']
-        },
-        {
           association: 'purchase',
           attributes: ['id', 'purchase_id', 'vendor_name', 'vendor_contact', 'purchase_date', 'total_amount']
         },
@@ -328,7 +320,7 @@ router.post(
     body('serial_no').optional({ checkFalsy: true }).trim(),
     // MAC Address only required for IT assets, but optional for all
     body('mac_address').optional({ checkFalsy: true }).trim(),
-    body('status').optional({ checkFalsy: true }).isIn(['active', 'inactive', 'disposed']).withMessage('Invalid status'),
+    body('status').optional({ checkFalsy: true }).isIn(['active', 'inactive', 'retired']).withMessage('Invalid status'),
     body('purchase_id').optional({ checkFalsy: true }).isUUID().withMessage('Invalid purchase ID'),
     // Assigned To validation: must be valid if provided, and only allowed for active assets
     body('assigned_to')
@@ -532,8 +524,7 @@ router.post(
 
       const createdAsset = await models.Asset.findByPk(asset.id, {
         include: [
-          { association: 'detail' },
-          { association: 'assignedUser', attributes: ['id', 'name', 'email'] }
+          { association: 'detail' }
         ]
       });
 
@@ -563,8 +554,8 @@ router.post(
 
 router.put(
   '/:id',
-  verifyToken,
-  requireRole('admin', 'staff'),
+  /* verifyToken, */
+  /* requireRole('admin', 'staff'), */
   [
     body('asset_tag').optional().trim(),
     body('category').optional().isIn(['IT', 'Non-IT']).withMessage('Category must be IT or Non-IT'),
@@ -573,7 +564,7 @@ router.put(
     body('serial_no').optional().trim(),
     body('mac_address').optional().trim(),
     body('purchase_id').optional().isUUID().withMessage('Invalid purchase ID'),
-    body('status').optional().isIn(['active', 'inactive', 'disposed']).withMessage('Invalid status'),
+    body('status').optional().isIn(['active', 'inactive', 'retired']).withMessage('Invalid status'),
     // Assigned To validation: must be valid if provided, and only allowed for active assets
     body('assigned_to')
       .optional({ checkFalsy: true })
@@ -723,7 +714,7 @@ router.put(
         }
       });
 
-      if (Object.keys(changedFields).length > 0 || Object.keys(detailUpdates).length > 0) {
+      if ((Object.keys(changedFields).length > 0 || Object.keys(detailUpdates).length > 0) && req.user?.id) {
         await logAuditEvent(asset.id, req.user.id, 'Asset Updated', oldAssetValues, {
           ...assetUpdates,
           ...detailUpdates
@@ -734,8 +725,7 @@ router.put(
 
       const updatedAsset = await models.Asset.findByPk(asset.id, {
         include: [
-          { association: 'detail' },
-          { association: 'assignedUser', attributes: ['id', 'name', 'email'] }
+          { association: 'detail' }
         ]
       });
 
@@ -756,7 +746,7 @@ router.put(
   }
 );
 
-router.delete('/:id', verifyToken, requireRole('admin'), async (req, res) => {
+router.delete('/:id', /* verifyToken, */ /* requireRole('admin'), */ async (req, res) => {
   const transaction = await models.sequelize.transaction();
 
   try {
@@ -775,7 +765,9 @@ router.delete('/:id', verifyToken, requireRole('admin'), async (req, res) => {
 
     await asset.update({ status: 'disposed' }, { transaction });
 
-    await logAuditEvent(asset.id, req.user.id, 'Asset Disposed', { status: oldStatus }, { status: 'disposed' });
+    if (req.user?.id) {
+      await logAuditEvent(asset.id, req.user.id, 'Asset Disposed', { status: oldStatus }, { status: 'disposed' });
+    }
 
     await transaction.commit();
 

@@ -90,6 +90,10 @@ export const Contracts = () => {
   const [showRenewalModal, setShowRenewalModal] = useState(false);
   const [renewalTarget, setRenewalTarget] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewContract, setViewContract] = useState(null);
+  const [renewalNewTill, setRenewalNewTill] = useState('');
+  const [renewalLoading, setRenewalLoading] = useState(false);
   const [mockContracts, setMockContracts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -180,7 +184,8 @@ export const Contracts = () => {
   const handleViewContract = (id) => {
     const contract = mockContracts.find(c => c.id === id);
     if (contract) {
-      toast.success(`Viewing ${contract.contract_id} - ${contract.vendor_name}`);
+      setViewContract(contract);
+      setShowViewModal(true);
     }
   };
 
@@ -192,7 +197,7 @@ export const Contracts = () => {
   const confirmDelete = async () => {
     try {
       await api.delete(`/contracts/${deleteTarget.id}`);
-      toast.success(`Contract ${deleteTarget.contractId} deleted successfully`);
+      toast.success(`Contract ${deleteTarget.contractId} deleted`);
       setMockContracts(prev => prev.filter(c => c.id !== deleteTarget.id));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete contract');
@@ -202,16 +207,47 @@ export const Contracts = () => {
   };
 
   const handleRenewContract = (id, contractId) => {
-    setRenewalTarget({ id, contractId });
+    const contract = mockContracts.find(c => c.id === id);
+    // Default new expiry = 1 year from current active_till
+    const currentTill = new Date(contract.active_till);
+    currentTill.setFullYear(currentTill.getFullYear() + 1);
+    setRenewalNewTill(currentTill.toISOString().split('T')[0]);
+    setRenewalTarget({ id, contractId, contract });
     setShowRenewalModal(true);
   };
 
-  const confirmRenewal = () => {
-    const newDate = new Date();
-    newDate.setFullYear(newDate.getFullYear() + 1);
-    toast.success(`Contract ${renewalTarget.contractId} renewed until ${newDate.toLocaleDateString()}`);
-    setShowRenewalModal(false);
-    setRenewalTarget(null);
+  const confirmRenewal = async () => {
+    if (!renewalNewTill) {
+      toast.error('Please select a new expiry date');
+      return;
+    }
+    setRenewalLoading(true);
+    try {
+      const contract = renewalTarget.contract;
+      const newTill = new Date(renewalNewTill);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((newTill - today) / (1000 * 60 * 60 * 24));
+      const newStatus = newTill < today ? 'expired' : daysLeft <= 30 ? 'expiring_soon' : 'active';
+
+      await api.put(`/contracts/${renewalTarget.id}`, {
+        active_till: renewalNewTill,
+        status: newStatus
+      });
+
+      setMockContracts(prev => prev.map(c =>
+        c.id === renewalTarget.id
+          ? { ...c, active_till: renewalNewTill, status: newStatus }
+          : c
+      ));
+      toast.success(`Contract ${renewalTarget.contractId} renewed until ${new Date(renewalNewTill).toLocaleDateString('en-IN')}`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to renew contract');
+    } finally {
+      setRenewalLoading(false);
+      setShowRenewalModal(false);
+      setRenewalTarget(null);
+    }
   };
 
   const handleUploadDocument = () => {
@@ -339,7 +375,8 @@ export const Contracts = () => {
                         <td className="px-6 py-4 text-gray-700">{new Date(contract.active_till).toLocaleDateString('en-IN')}</td>
                         <td className="px-6 py-4"><StatusBadge status={contract.status} /></td>
                         <td className="px-6 py-4">
-                          <div className="flex gap-2">
+                          <div className="flex gap-3">
+                            <button onClick={() => handleViewContract(contract.id)} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View</button>
                             <button onClick={() => handleRenewContract(contract.id, contract.contract_id)} className="text-green-600 hover:text-green-800 font-medium text-xs">Renew</button>
                             <button onClick={() => handleDeleteContract(contract.id, contract.contract_id)} className="text-red-600 hover:text-red-800 font-medium text-xs">Delete</button>
                           </div>
@@ -500,20 +537,79 @@ export const Contracts = () => {
           </div>
         )}
 
-        {/* Renewal Confirmation Modal */}
-        {showRenewalModal && (
+        {/* Renewal Modal */}
+        {showRenewalModal && renewalTarget && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-lg font-bold text-gray-800 mb-2">Renew Contract</h2>
-              <p className="text-gray-600 mb-6">
-                Do you want to renew <span className="font-semibold">{renewalTarget?.contractId}</span> for another year?
-              </p>
+              <h2 className="text-lg font-bold text-gray-800 mb-1">Renew Contract</h2>
+              <p className="text-sm text-gray-500 mb-4">{renewalTarget.contractId} — {renewalTarget.contract?.contract_name}</p>
+              <div className="mb-2 text-sm text-gray-600">
+                Current expiry: <span className="font-medium">{new Date(renewalTarget.contract?.active_till).toLocaleDateString('en-IN')}</span>
+              </div>
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Expiry Date</label>
+                <input
+                  type="date"
+                  value={renewalNewTill}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setRenewalNewTill(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
               <div className="flex gap-3 justify-end">
-                <button onClick={() => setShowRenewalModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                <button onClick={() => { setShowRenewalModal(false); setRenewalTarget(null); }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
                   Cancel
                 </button>
-                <button onClick={confirmRenewal} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <button onClick={confirmRenewal} disabled={renewalLoading}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 flex items-center gap-2">
+                  {renewalLoading && <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>}
                   Renew
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Contract Modal */}
+        {showViewModal && viewContract && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">{viewContract.contract_name}</h2>
+                  <p className="text-sm text-gray-500">{viewContract.contract_id}</p>
+                </div>
+                <StatusBadge status={viewContract.status} />
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mb-5">
+                <div><p className="text-gray-500">Vendor</p><p className="font-medium text-gray-800">{viewContract.vendor_name}</p></div>
+                <div><p className="text-gray-500">Contract Value</p><p className="font-medium text-gray-800">₹{(parseFloat(viewContract.contract_value) || 0).toLocaleString()}</p></div>
+                <div><p className="text-gray-500">Active From</p><p className="font-medium text-gray-800">{new Date(viewContract.active_from).toLocaleDateString('en-IN')}</p></div>
+                <div><p className="text-gray-500">Expires On</p><p className="font-medium text-gray-800">{new Date(viewContract.active_till).toLocaleDateString('en-IN')}</p></div>
+                {viewContract.vendor_contact && <div><p className="text-gray-500">Contact</p><p className="font-medium text-gray-800">{viewContract.vendor_contact}</p></div>}
+                {viewContract.vendor_email && <div><p className="text-gray-500">Email</p><p className="font-medium text-gray-800">{viewContract.vendor_email}</p></div>}
+                {viewContract.vendor_phone && <div><p className="text-gray-500">Phone</p><p className="font-medium text-gray-800">{viewContract.vendor_phone}</p></div>}
+                {viewContract.vendor_address && <div className="col-span-2"><p className="text-gray-500">Address</p><p className="font-medium text-gray-800">{viewContract.vendor_address}</p></div>}
+              </div>
+              {(viewContract.notes || viewContract.description) && (
+                <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm text-gray-700">
+                  <p className="text-gray-500 mb-1">Notes</p>
+                  <p>{viewContract.notes || viewContract.description}</p>
+                </div>
+              )}
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { setShowViewModal(false); setViewContract(null); }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                  Close
+                </button>
+                <button onClick={() => { setShowViewModal(false); handleRenewContract(viewContract.id, viewContract.contract_id); }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  Renew
+                </button>
+                <button onClick={() => { setShowViewModal(false); handleDeleteContract(viewContract.id, viewContract.contract_id); }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                  Delete
                 </button>
               </div>
             </div>

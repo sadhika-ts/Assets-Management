@@ -1,700 +1,867 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '../layouts/AppLayout';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
 
-const COLORS = ['#3b82f6','#22c55e','#f97316','#ef4444','#a855f7','#06b6d4','#eab308','#ec4899'];
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316', '#84cc16'];
 
-const fmt = (n) => (parseFloat(n) || 0).toLocaleString('en-IN');
-const fmtL = (n) => {
-  const v = parseFloat(n) || 0;
-  return v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : `₹${v.toLocaleString('en-IN')}`;
-};
-
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-const KPI = ({ label, value, sub, color = 'blue', icon }) => (
-  <div className={`bg-white rounded-lg shadow-sm border-l-4 border-${color}-500 p-5`}>
-    <div className="flex justify-between items-start">
-      <div>
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-        <p className={`text-3xl font-bold text-${color}-600 mt-1`}>{value}</p>
-        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
-      </div>
-      <span className="text-3xl">{icon}</span>
-    </div>
-  </div>
-);
-
-// ── Empty State ───────────────────────────────────────────────────────────────
-const Empty = ({ msg = 'No data available for selected filters.' }) => (
-  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-    <span className="text-5xl mb-3">📭</span>
-    <p className="text-sm">{msg}</p>
-  </div>
-);
-
-// ── Section Wrapper ───────────────────────────────────────────────────────────
-const Card = ({ title, children, className = '' }) => (
-  <div className={`bg-white rounded-lg shadow-sm p-6 ${className}`}>
-    {title && <h3 className="text-base font-semibold text-gray-800 mb-4">{title}</h3>}
-    {children}
-  </div>
-);
-
-// ── Simple Table ──────────────────────────────────────────────────────────────
-const Table = ({ cols, rows }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full text-sm">
-      <thead className="bg-gray-50 border-b">
-        <tr>{cols.map(c => <th key={c.key} className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">{c.label}</th>)}</tr>
-      </thead>
-      <tbody className="divide-y divide-gray-100">
-        {rows.length === 0
-          ? <tr><td colSpan={cols.length} className="px-4 py-8 text-center text-gray-400 text-xs">No records</td></tr>
-          : rows.map((r, i) => (
-            <tr key={i} className="hover:bg-gray-50">
-              {cols.map(c => <td key={c.key} className="px-4 py-2 text-gray-700">{r[c.key] ?? '—'}</td>)}
-            </tr>
-          ))
-        }
-      </tbody>
-    </table>
-  </div>
-);
-
-// ── Status Badge ──────────────────────────────────────────────────────────────
-const Badge = ({ v }) => {
-  const map = {
-    active: 'bg-green-100 text-green-700',
-    expired: 'bg-red-100 text-red-700',
-    expiring_soon: 'bg-orange-100 text-orange-700',
-    upcoming: 'bg-blue-100 text-blue-700',
-    pending: 'bg-yellow-100 text-yellow-700',
-    ordered: 'bg-blue-100 text-blue-700',
-    delivered: 'bg-green-100 text-green-700',
-    maintenance: 'bg-orange-100 text-orange-700',
+const StatCard = ({ label, value, color = 'blue' }) => {
+  const colorMap = {
+    blue: 'from-blue-50 to-blue-100 border-blue-500 text-blue-700',
+    green: 'from-green-50 to-green-100 border-green-500 text-green-700',
+    orange: 'from-orange-50 to-orange-100 border-orange-500 text-orange-700',
+    red: 'from-red-50 to-red-100 border-red-500 text-red-700',
+    purple: 'from-purple-50 to-purple-100 border-purple-500 text-purple-700',
   };
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[v] || 'bg-gray-100 text-gray-700'}`}>{v}</span>;
+  return (
+    <div className={`bg-gradient-to-br ${colorMap[color]} p-5 rounded-lg border-l-4`}>
+      <p className="text-gray-600 text-sm">{label}</p>
+      <p className={`text-3xl font-bold mt-1 ${colorMap[color].split(' ').pop()}`}>{value}</p>
+    </div>
+  );
 };
 
-// ── Export helpers ────────────────────────────────────────────────────────────
-const exportCSV = (rows, cols, filename) => {
-  const header = cols.map(c => c.label).join(',');
-  const body = rows.map(r => cols.map(c => `"${r[c.key] ?? ''}"`).join(',')).join('\n');
-  const blob = new Blob([header + '\n' + body], { type: 'text/csv' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `${filename}.csv`; a.click();
+const ExportModal = ({ isOpen, onClose, reportName, onExport }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <h2 className="text-lg font-bold text-gray-800 mb-4">Export — {reportName}</h2>
+        <div className="space-y-3 mb-6">
+          <button onClick={() => onExport('csv')} className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition flex items-center gap-2">
+            <span>📋</span> Export as CSV
+          </button>
+          <button onClick={() => onExport('excel')} className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium transition flex items-center gap-2">
+            <span>📊</span> Export as Excel (CSV)
+          </button>
+          <button onClick={() => onExport('json')} className="w-full bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 font-medium transition flex items-center gap-2">
+            <span>📄</span> Export as JSON
+          </button>
+        </div>
+        <button onClick={onClose} className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 font-medium">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 };
 
-const printSection = (title) => {
-  window.print();
-};
+const EmptyChart = ({ message = 'No data available' }) => (
+  <div className="flex items-center justify-center h-full text-gray-400 text-sm">{message}</div>
+);
 
-// ── Main Component ────────────────────────────────────────────────────────────
 export const Reports = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('assets');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState('');
+  const [exportData, setExportData] = useState([]);
 
-  // filters
-  const today = new Date();
-  const yearStart = `${today.getFullYear()}-01-01`;
-  const [dateFrom, setDateFrom] = useState(yearStart);
-  const [dateTo, setDateTo] = useState(today.toISOString().split('T')[0]);
-  const [filterCategory, setFilterCategory] = useState('all');
+  const [dateFrom, setDateFrom] = useState('2025-01-01');
+  const [dateTo, setDateTo] = useState('2026-12-31');
+  const [filterAssetType, setFilterAssetType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterVendor, setFilterVendor] = useState('all');
+  const [filterContractStatus, setFilterContractStatus] = useState('all');
 
-  // data
-  const [dashboard, setDashboard] = useState(null);
-  const [assetData, setAssetData] = useState(null);
-  const [purchaseData, setPurchaseData] = useState(null);
-  const [contractData, setContractData] = useState(null);
-  const [maintenanceData, setMaintenanceData] = useState(null);
-  const [freqData, setFreqData] = useState(null);
+  const [assets, setAssets] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [contracts, setContracts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const fetchDashboard = useCallback(async () => {
-    try {
-      const r = await api.get('/reports/dashboard');
-      setDashboard(r.data.data);
-    } catch { setDashboard(null); }
-  }, []);
-
-  const fetchTab = useCallback(async (tab) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ from: dateFrom, to: dateTo });
-      if (filterCategory !== 'all') params.append('category', filterCategory);
-      if (filterStatus !== 'all') params.append('status', filterStatus);
-      if (filterVendor !== 'all') params.append('vendor', filterVendor);
-
-      if (tab === 'assets') {
-        const r = await api.get(`/reports/assets?${params}`);
-        setAssetData(r.data.data);
-      } else if (tab === 'purchases') {
-        const r = await api.get(`/reports/purchases?${params}`);
-        setPurchaseData(r.data.data);
-      } else if (tab === 'contracts') {
-        const r = await api.get(`/reports/contracts?${params}`);
-        setContractData(r.data.data);
-      } else if (tab === 'maintenance') {
-        const r = await api.get(`/reports/maintenance?${params}`);
-        setMaintenanceData(r.data.data);
-      } else if (tab === 'frequently') {
-        const r = await api.get(`/reports/frequently-requested?${params}`);
-        setFreqData(r.data.data);
+  const extractArray = (res, ...keys) => {
+    const d = res?.data;
+    if (Array.isArray(d)) return d;
+    if (d?.data) {
+      for (const k of keys) {
+        if (Array.isArray(d.data[k])) return d.data[k];
       }
-    } catch (e) { console.error(e); }
-    setLoading(false);
-  }, [dateFrom, dateTo, filterCategory, filterStatus, filterVendor]);
-
-  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+      if (Array.isArray(d.data)) return d.data;
+    }
+    return [];
+  };
 
   useEffect(() => {
-    if (activeTab !== 'dashboard') fetchTab(activeTab);
-  }, [activeTab, fetchTab]);
+    const fetchAll = async () => {
+      setLoading(true);
+      try {
+        const [aRes, pRes, cRes] = await Promise.all([
+          api.get('/assets?limit=100'),
+          api.get('/purchases'),
+          api.get('/contracts'),
+        ]);
+        setAssets(extractArray(aRes, 'assets'));
+        setPurchases(extractArray(pRes, 'purchases'));
+        setContracts(extractArray(cRes, 'contracts'));
+      } catch (err) {
+        toast.error('Failed to load report data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
 
-  const tabs = [
-    { id: 'dashboard', label: '🏠 Dashboard' },
-    { id: 'assets',    label: '💻 Assets' },
-    { id: 'purchases', label: '🛒 Purchases' },
-    { id: 'contracts', label: '📋 Contracts' },
-    { id: 'maintenance', label: '🔧 Maintenance' },
-    { id: 'frequently', label: '⭐ Frequently Requested' },
-  ];
-
-  // ── Filters bar ─────────────────────────────────────────────────────────────
-  const Filters = () => (
-    <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap gap-4 items-end">
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
-        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-          <option value="all">All Categories</option>
-          <option value="IT">IT</option>
-          <option value="Non-IT">Non-IT</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="disposed">Disposed</option>
-        </select>
-      </div>
-      <button onClick={() => fetchTab(activeTab)}
-        className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-        Apply Filters
-      </button>
-      <button onClick={() => { setDateFrom(yearStart); setDateTo(today.toISOString().split('T')[0]); setFilterCategory('all'); setFilterStatus('all'); setFilterVendor('all'); }}
-        className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">
-        Reset
-      </button>
-    </div>
-  );
-
-  const Loader = () => (
-    <div className="flex justify-center items-center py-20">
-      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-    </div>
-  );
-
-  // ── DASHBOARD TAB ───────────────────────────────────────────────────────────
-  const DashboardTab = () => {
-    if (!dashboard) return <Loader />;
-    const d = dashboard;
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <KPI label="Total Assets"        value={d.totalAssets}      icon="💻" color="blue" />
-          <KPI label="Active Assets"       value={d.activeAssets}     icon="✅" color="green" />
-          <KPI label="Inactive Assets"     value={d.inactiveAssets}   icon="⏸️" color="gray" />
-          <KPI label="In Maintenance"      value={d.maintenanceAssets} icon="🔧" color="orange" />
-          <KPI label="Assigned"            value={d.assignedAssets}   icon="👤" color="purple" />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <KPI label="Unassigned"          value={d.unassignedAssets} icon="📦" color="yellow" />
-          <KPI label="Total Contracts"     value={d.totalContracts}   icon="📋" color="blue" />
-          <KPI label="Active Contracts"    value={d.activeContracts}  icon="✅" color="green" />
-          <KPI label="Expired Contracts"   value={d.expiredContracts} icon="❌" color="red" />
-          <KPI label="Expiring (30 days)"  value={d.expiringContracts} icon="⚠️" color="orange" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-6">
-            <p className="text-sm font-medium opacity-80">Total Purchase Spend</p>
-            <p className="text-4xl font-bold mt-1">{fmtL(d.totalSpent)}</p>
-          </div>
-          <div className="bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg p-6">
-            <p className="text-sm font-medium opacity-80">Asset Utilization</p>
-            <p className="text-4xl font-bold mt-1">{d.utilization}%</p>
-            <p className="text-xs opacity-70 mt-1">{d.assignedAssets} of {d.totalAssets} assets assigned</p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ── ASSETS TAB ──────────────────────────────────────────────────────────────
-  const AssetsTab = () => {
-    if (loading) return <Loader />;
-    if (!assetData) return <Empty />;
-    const d = assetData;
-    return (
-      <div className="space-y-6">
-        {/* KPIs */}
-        <div className="grid grid-cols-3 gap-4">
-          <KPI label="Total Assets" value={d.total} icon="💻" color="blue" />
-          <KPI label="Assigned" value={d.assigned} icon="👤" color="green" />
-          <KPI label="Unassigned" value={d.unassigned} icon="📦" color="orange" />
-        </div>
-
-        {/* Charts row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Category Distribution">
-            {d.categoryWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={d.categoryWise} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}
-                    label={({ name, value }) => `${name}: ${value}`}>
-                    {d.categoryWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip /><Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          <Card title="Status Distribution">
-            {d.statusWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={d.statusWise}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" /><YAxis />
-                  <Tooltip />
-                  <Bar dataKey="value" name="Count">
-                    {d.statusWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        {/* Charts row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Sub-Type Distribution (Top 10)">
-            {d.subTypeWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={d.subTypeWise.slice(0,10)} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" /><YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#3b82f6" name="Count" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          <Card title="Assets Added per Month">
-            {d.monthlyTrend.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={d.monthlyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis /><Tooltip />
-                  <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#bfdbfe" name="Assets Added" />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        {/* Department-wise */}
-        {d.deptWise.length > 0 && (
-          <Card title="Assets by Assigned User (Top 10)">
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={d.deptWise}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} />
-                <YAxis /><Tooltip />
-                <Bar dataKey="value" fill="#a855f7" name="Assets" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        )}
-
-        {/* Recently added table */}
-        <Card title={`Recently Added Assets (${d.recentlyAdded.length})`}>
-          <div className="mb-3 flex justify-end">
-            <button onClick={() => exportCSV(d.recentlyAdded, [
-              {key:'asset_tag',label:'Tag'},{key:'asset_name',label:'Name'},
-              {key:'category',label:'Category'},{key:'sub_type',label:'Sub-type'},
-              {key:'status',label:'Status'},{key:'assigned_to',label:'Assigned To'}
-            ], 'recently_added_assets')}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">
-              ⬇ Export CSV
-            </button>
-          </div>
-          <Table
-            cols={[
-              {key:'asset_tag',label:'Tag'},{key:'asset_name',label:'Name'},
-              {key:'category',label:'Category'},{key:'sub_type',label:'Sub-type'},
-              {key:'status',label:'Status'},{key:'assigned_to',label:'Assigned To'}
-            ]}
-            rows={d.recentlyAdded}
-          />
-        </Card>
-      </div>
-    );
-  };
-
-  // ── PURCHASES TAB ───────────────────────────────────────────────────────────
-  const PurchasesTab = () => {
-    if (loading) return <Loader />;
-    if (!purchaseData) return <Empty />;
-    const d = purchaseData;
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KPI label="Total Orders" value={d.total} icon="🛒" color="blue" />
-          <KPI label="Total Spent" value={fmtL(d.totalAmount)} icon="💰" color="green" />
-          <KPI label="Avg per Order" value={fmtL(d.total ? d.totalAmount / d.total : 0)} icon="📊" color="purple" />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Monthly Purchase Trend">
-            {d.monthly.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={d.monthly}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis />
-                  <Tooltip formatter={v => `₹${v.toLocaleString('en-IN')}`} />
-                  <Area type="monotone" dataKey="amount" stroke="#22c55e" fill="#bbf7d0" name="Amount (₹)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          <Card title="Order Count by Month">
-            {d.monthly.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={d.monthly}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#3b82f6" name="Orders" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Vendor-wise Spending (Top 10)">
-            {d.vendorWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={d.vendorWise} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" /><YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={v => `₹${v.toLocaleString('en-IN')}`} />
-                  <Bar dataKey="amount" fill="#f97316" name="Amount (₹)" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          <Card title="Status Distribution">
-            {d.statusWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={d.statusWise} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90}
-                    label={({ name, count }) => `${name}: ${count}`}>
-                    {d.statusWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip /><Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        <Card title="Top Purchases by Value">
-          <div className="mb-3 flex justify-end">
-            <button onClick={() => exportCSV(d.topPurchases, [
-              {key:'purchase_id',label:'PO ID'},{key:'vendor_name',label:'Vendor'},
-              {key:'total_amount',label:'Amount'},{key:'purchase_date',label:'Date'},{key:'status',label:'Status'}
-            ], 'top_purchases')}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">
-              ⬇ Export CSV
-            </button>
-          </div>
-          <Table
-            cols={[
-              {key:'purchase_id',label:'PO ID'},{key:'vendor_name',label:'Vendor'},
-              {key:'total_amount',label:'Amount (₹)'},{key:'purchase_date',label:'Date'},{key:'status',label:'Status'}
-            ]}
-            rows={d.topPurchases.map(p => ({
-              ...p,
-              total_amount: `₹${(parseFloat(p.total_amount)||0).toLocaleString('en-IN')}`,
-              purchase_date: new Date(p.purchase_date).toLocaleDateString('en-IN'),
-              status: <Badge v={p.status} />
-            }))}
-          />
-        </Card>
-      </div>
-    );
-  };
-
-  // ── CONTRACTS TAB ───────────────────────────────────────────────────────────
-  const ContractsTab = () => {
-    if (loading) return <Loader />;
-    if (!contractData) return <Empty />;
-    const d = contractData;
-    const cols = [
-      {key:'contract_id',label:'ID'},{key:'contract_name',label:'Name'},
-      {key:'vendor_name',label:'Vendor'},{key:'contract_value',label:'Value (₹)'},
-      {key:'active_till',label:'Expires'},{key:'status',label:'Status'}
-    ];
-    const mapRow = r => ({
-      ...r,
-      contract_value: `₹${(r.contract_value||0).toLocaleString('en-IN')}`,
-      active_till: new Date(r.active_till).toLocaleDateString('en-IN'),
-      status: <Badge v={r.status} />
+  // ---- Filtered assets ----
+  const filteredAssets = useMemo(() => {
+    return assets.filter(a => {
+      if (a.created_at) {
+        const createdAt = new Date(a.created_at);
+        const from = new Date(dateFrom);
+        const to = new Date(dateTo);
+        if (createdAt < from || createdAt > to) return false;
+      }
+      if (filterAssetType !== 'all') {
+        if (filterAssetType === 'it' && a.category !== 'IT') return false;
+        if (filterAssetType === 'non-it' && a.category !== 'Non-IT') return false;
+      }
+      if (filterStatus !== 'all' && a.status !== filterStatus) return false;
+      return true;
     });
+  }, [assets, dateFrom, dateTo, filterAssetType, filterStatus]);
+
+  // ---- Filtered contracts ----
+  const filteredContracts = useMemo(() => {
+    return contracts.filter(c => {
+      if (filterContractStatus !== 'all' && c.status !== filterContractStatus) return false;
+      return true;
+    });
+  }, [contracts, filterContractStatus]);
+
+  // ---- Asset analytics ----
+  const assetStats = useMemo(() => {
+    const categoryMap = {};
+    const subTypeMap = {};
+    filteredAssets.forEach(a => {
+      categoryMap[a.category] = (categoryMap[a.category] || 0) + 1;
+      const key = a.sub_type || 'Unknown';
+      subTypeMap[key] = (subTypeMap[key] || 0) + 1;
+    });
+
+    const categoryWise = Object.entries(categoryMap).map(([name, count], i) => ({
+      name, count, color: COLORS[i % COLORS.length]
+    }));
+    const subTypeWise = Object.entries(subTypeMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+
+    const assigned = filteredAssets.filter(a => a.assigned_to).length;
+    const unassigned = filteredAssets.length - assigned;
+
+    const statusMap = {};
+    filteredAssets.forEach(a => {
+      statusMap[a.status] = (statusMap[a.status] || 0) + 1;
+    });
+    const statusWise = Object.entries(statusMap).map(([name, count], i) => ({
+      name, count, color: COLORS[i % COLORS.length]
+    }));
+
+    return { categoryWise, subTypeWise, assigned, unassigned, statusWise, total: filteredAssets.length };
+  }, [filteredAssets]);
+
+  // ---- Purchase analytics ----
+  const purchaseStats = useMemo(() => {
+    const filteredPurchases = purchases.filter(p => {
+      const d = new Date(p.purchase_date);
+      return d >= new Date(dateFrom) && d <= new Date(dateTo);
+    });
+
+    const monthMap = {};
+    const vendorMap = {};
+    filteredPurchases.forEach(p => {
+      const month = p.purchase_date ? p.purchase_date.slice(0, 7) : 'Unknown';
+      monthMap[month] = (monthMap[month] || 0) + (parseFloat(p.total_amount) || 0);
+      const v = p.vendor_name || 'Unknown';
+      vendorMap[v] = (vendorMap[v] || 0) + (parseFloat(p.total_amount) || 0);
+    });
+
+    const monthly = Object.entries(monthMap).sort().map(([month, amount]) => ({
+      month: month.replace('-', '/'),
+      amount,
+      count: filteredPurchases.filter(p => p.purchase_date?.startsWith(month)).length
+    }));
+
+    const vendorWise = Object.entries(vendorMap).map(([vendor, spent]) => ({ vendor, spent }));
+    const totalSpend = filteredPurchases.reduce((s, p) => s + (parseFloat(p.total_amount) || 0), 0);
+
+    return { monthly, vendorWise, total: filteredPurchases.length, totalSpend };
+  }, [purchases, dateFrom, dateTo]);
+
+  // ---- Contract analytics ----
+  const contractStats = useMemo(() => {
+    const today = new Date();
+    const thirtyDays = new Date();
+    thirtyDays.setDate(thirtyDays.getDate() + 30);
+
+    const active = filteredContracts.filter(c => c.status === 'active').length;
+    const expired = filteredContracts.filter(c => c.status === 'expired').length;
+    const expiring = filteredContracts.filter(c => {
+      if (c.status !== 'active') return false;
+      const till = new Date(c.active_till);
+      return till >= today && till <= thirtyDays;
+    }).length;
+
+    const totalValue = filteredContracts.reduce((s, c) => s + (parseFloat(c.contract_value) || 0), 0);
+    const vendorMap = {};
+    filteredContracts.forEach(c => {
+      const v = c.vendor_name || 'Unknown';
+      vendorMap[v] = (vendorMap[v] || 0) + 1;
+    });
+    const vendorWise = Object.entries(vendorMap).map(([vendor, count]) => ({ vendor, count }));
+
+    return { active, expired, expiring, total: filteredContracts.length, totalValue, vendorWise };
+  }, [filteredContracts]);
+
+  // ---- Maintenance analytics ----
+  const maintenanceStats = useMemo(() => {
+    const needingService = filteredAssets.filter(a => a.status === 'maintenance').length;
+    const retired = filteredAssets.filter(a => a.status === 'retired').length;
+    return { needingService, retired };
+  }, [filteredAssets]);
+
+  // ---- Frequently used ----
+  const frequentStats = useMemo(() => {
+    const subTypeMap = {};
+    filteredAssets.forEach(a => {
+      const key = a.sub_type || 'Unknown';
+      subTypeMap[key] = (subTypeMap[key] || 0) + 1;
+    });
+    const mostUsedCategories = Object.entries(subTypeMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([category, usage]) => ({ category, usage }));
+
+    const assigneeMap = {};
+    filteredAssets.filter(a => a.assigned_to).forEach(a => {
+      assigneeMap[a.assigned_to] = (assigneeMap[a.assigned_to] || 0) + 1;
+    });
+    const mostAssigned = Object.entries(assigneeMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, count]) => ({ name, count }));
+
+    const maxCount = mostAssigned[0]?.count || 1;
+    return { mostUsedCategories, mostAssigned, maxCount };
+  }, [filteredAssets]);
+
+  // ---- Export helpers ----
+  const toCSV = (rows, headers) => {
+    const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [headers.map(escape).join(',')];
+    rows.forEach(row => lines.push(headers.map(h => escape(row[h])).join(',')));
+    return lines.join('\n');
+  };
+
+  const downloadFile = (content, filename, mime) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getReportRows = (reportName) => {
+    switch (reportName) {
+      case 'Assets Report':
+        return {
+          rows: filteredAssets.map(a => ({
+            asset_tag: a.asset_tag, name: a.asset_name, category: a.category,
+            sub_type: a.sub_type, status: a.status, assigned_to: a.assigned_to || 'Unassigned',
+            created_at: a.created_at
+          })),
+          headers: ['asset_tag', 'name', 'category', 'sub_type', 'status', 'assigned_to', 'created_at']
+        };
+      case 'Purchases Report':
+        return {
+          rows: purchases.map(p => ({
+            purchase_id: p.purchase_id, vendor_name: p.vendor_name,
+            purchase_date: p.purchase_date, total_amount: p.total_amount, status: p.status
+          })),
+          headers: ['purchase_id', 'vendor_name', 'purchase_date', 'total_amount', 'status']
+        };
+      case 'Contracts Report':
+        return {
+          rows: filteredContracts.map(c => ({
+            contract_id: c.contract_id, contract_name: c.contract_name, vendor_name: c.vendor_name,
+            active_from: c.active_from, active_till: c.active_till, status: c.status,
+            contract_value: c.contract_value
+          })),
+          headers: ['contract_id', 'contract_name', 'vendor_name', 'active_from', 'active_till', 'status', 'contract_value']
+        };
+      default:
+        return { rows: filteredAssets, headers: ['asset_tag', 'category', 'sub_type', 'status'] };
+    }
+  };
+
+  const handleGenerateReport = (reportName) => {
+    setSelectedReport(reportName);
+    setShowExportModal(true);
+  };
+
+  const handleExport = (format) => {
+    const slug = selectedReport.toLowerCase().replace(/\s+/g, '_');
+    const { rows, headers } = getReportRows(selectedReport);
+
+    if (format === 'json') {
+      downloadFile(JSON.stringify(rows, null, 2), `${slug}.json`, 'application/json');
+    } else {
+      const csv = toCSV(rows, headers);
+      const ext = format === 'excel' ? 'xlsx' : 'csv';
+      const mime = format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv';
+      downloadFile(csv, `${slug}.${ext}`, mime);
+    }
+    toast.success(`${selectedReport} exported as ${format.toUpperCase()}`);
+    setShowExportModal(false);
+  };
+
+  const formatCurrency = (v) => {
+    if (!v && v !== 0) return '—';
+    return `₹${(v / 100000).toFixed(1)}L`;
+  };
+
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KPI label="Total Contracts" value={d.total} icon="📋" color="blue" />
-          <KPI label="Total Value" value={fmtL(d.totalValue)} icon="💰" color="green" />
-          <KPI label="Expiring ≤30 days" value={d.expiring30.length} icon="⚠️" color="orange" />
+      <AppLayout title="Reports & Analytics">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Loading report data…</span>
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Status Distribution">
-            {d.statusWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie data={d.statusWise} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90}
-                    label={({ name, count }) => `${name}: ${count}`}>
-                    {d.statusWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip /><Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-          <Card title="Vendor-wise Contract Value">
-            {d.vendorWise.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={d.vendorWise}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} /><YAxis />
-                  <Tooltip formatter={v => `₹${v.toLocaleString('en-IN')}`} />
-                  <Bar dataKey="value" fill="#3b82f6" name="Value (₹)" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        {d.expiring30.length > 0 && (
-          <Card title={`⚠️ Expiring in 30 Days (${d.expiring30.length})`} className="border-l-4 border-orange-500">
-            <Table cols={cols} rows={d.expiring30.map(mapRow)} />
-          </Card>
-        )}
-        {d.expiring60.length > 0 && (
-          <Card title={`Expiring in 31–60 Days (${d.expiring60.length})`} className="border-l-4 border-yellow-400">
-            <Table cols={cols} rows={d.expiring60.map(mapRow)} />
-          </Card>
-        )}
-        {d.expiring90.length > 0 && (
-          <Card title={`Expiring in 61–90 Days (${d.expiring90.length})`} className="border-l-4 border-blue-400">
-            <Table cols={cols} rows={d.expiring90.map(mapRow)} />
-          </Card>
-        )}
-
-        <Card title={`All Contracts (${d.allContracts.length})`}>
-          <div className="mb-3 flex justify-end">
-            <button onClick={() => exportCSV(d.allContracts, cols, 'contracts_report')}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">
-              ⬇ Export CSV
-            </button>
-          </div>
-          <Table cols={cols} rows={d.allContracts.map(mapRow)} />
-        </Card>
-      </div>
+      </AppLayout>
     );
-  };
-
-  // ── MAINTENANCE TAB ─────────────────────────────────────────────────────────
-  const MaintenanceTab = () => {
-    if (loading) return <Loader />;
-    if (!maintenanceData) return <Empty />;
-    const d = maintenanceData;
-    return (
-      <div className="space-y-6">
-        <KPI label="Assets Under Maintenance" value={d.total} icon="🔧" color="orange" />
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Maintenance by Sub-type">
-            {d.subTypeWise.length === 0 ? <Empty msg="No assets currently under maintenance." /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={d.subTypeWise}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#f97316" name="Count" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-          <Card title="Maintenance by Category">
-            {d.categoryWise.length === 0 ? <Empty msg="No assets currently under maintenance." /> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie data={d.categoryWise} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90}
-                    label={({ name, count }) => `${name}: ${count}`}>
-                    {d.categoryWise.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip /><Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        <Card title={`Assets Under Maintenance (${d.assets.length})`}>
-          {d.assets.length === 0
-            ? <Empty msg="No assets currently under maintenance." />
-            : <Table
-                cols={[
-                  {key:'asset_tag',label:'Tag'},{key:'asset_name',label:'Name'},
-                  {key:'category',label:'Category'},{key:'sub_type',label:'Sub-type'},
-                  {key:'assigned_to',label:'Last Assigned'},{key:'updated_at',label:'Since'}
-                ]}
-                rows={d.assets.map(a => ({
-                  ...a,
-                  updated_at: new Date(a.updated_at).toLocaleDateString('en-IN')
-                }))}
-              />
-          }
-        </Card>
-      </div>
-    );
-  };
-
-  // ── FREQUENTLY REQUESTED TAB ────────────────────────────────────────────────
-  const FreqTab = () => {
-    if (loading) return <Loader />;
-    if (!freqData) return <Empty />;
-    const d = freqData;
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Most Assigned Asset Types">
-            {d.mostAssigned.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={d.mostAssigned} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" /><YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#a855f7" name="Assigned Count" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-          <Card title="Category Demand">
-            {d.categoryDemand.length === 0 ? <Empty /> : (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={d.categoryDemand} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={100}
-                    label={({ name, count }) => `${name}: ${count}`}>
-                    {d.categoryDemand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip /><Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        <Card title="Users with Most Assets Assigned">
-          {d.perUser.length === 0 ? <Empty /> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={d.perUser}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} /><YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#06b6d4" name="Assets Assigned" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </Card>
-
-        <Card title="Most Assigned Asset Types — Detail">
-          <Table
-            cols={[{key:'name',label:'Sub-type'},{key:'category',label:'Category'},{key:'count',label:'Assigned Count'}]}
-            rows={d.mostAssigned}
-          />
-        </Card>
-      </div>
-    );
-  };
-
-  const tabContent = {
-    dashboard: <DashboardTab />,
-    assets: <AssetsTab />,
-    purchases: <PurchasesTab />,
-    contracts: <ContractsTab />,
-    maintenance: <MaintenanceTab />,
-    frequently: <FreqTab />,
-  };
+  }
 
   return (
     <AppLayout title="Reports & Analytics">
-      <div className="space-y-5">
+      <div className="space-y-6">
+
         {/* Header */}
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">Reports & Analytics</h2>
-          <button onClick={() => { fetchDashboard(); fetchTab(activeTab); }}
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
-            🔄 Refresh
+          <button
+            onClick={() => { setLoading(true); window.location.reload(); }}
+            className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 font-medium transition-all text-sm"
+          >
+            Refresh Data
           </button>
         </div>
 
-        {/* Tab bar */}
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Filters</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Asset Type</label>
+              <select value={filterAssetType} onChange={e => setFilterAssetType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="all">All Types</option>
+                <option value="it">IT Assets</option>
+                <option value="non-it">Non-IT Assets</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Asset Status</label>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="retired">Retired</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Contract Status</label>
+              <select value={filterContractStatus} onChange={e => setFilterContractStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
         <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition border-b-2 ${
-                activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          {[
+            { id: 'assets', label: 'Assets' },
+            { id: 'purchases', label: 'Purchases' },
+            { id: 'contracts', label: 'Contracts' },
+            { id: 'maintenance', label: 'Maintenance' },
+            { id: 'frequently', label: 'Frequently Used' },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-2.5 font-medium text-sm transition whitespace-nowrap border-b-2 -mb-px ${
+                activeTab === tab.id ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'
               }`}>
-              {t.label}
+              {tab.label}
             </button>
           ))}
         </div>
 
-        {/* Filters (not shown on dashboard) */}
-        {activeTab !== 'dashboard' && <Filters />}
+        {/* ===== ASSETS TAB ===== */}
+        {activeTab === 'assets' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard label="Total Assets" value={assetStats.total} color="blue" />
+              <StatCard label="Assigned" value={assetStats.assigned} color="green" />
+              <StatCard label="Unassigned" value={assetStats.unassigned} color="orange" />
+              <StatCard label="In Maintenance" value={maintenanceStats.needingService} color="red" />
+            </div>
 
-        {/* Content */}
-        {tabContent[activeTab]}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold text-gray-800">Category Distribution</h3>
+                  <button onClick={() => handleGenerateReport('Assets Report')}
+                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 transition">
+                    Export
+                  </button>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  {assetStats.categoryWise.length > 0 ? (
+                    <PieChart>
+                      <Pie data={assetStats.categoryWise} cx="50%" cy="50%" outerRadius={90}
+                        dataKey="count" label={({ name, count }) => `${name}: ${count}`} labelLine={false}>
+                        {assetStats.categoryWise.map((e, i) => <Cell key={i} fill={e.color} />)}
+                      </Pie>
+                      <Tooltip formatter={(v, n) => [v, 'Count']} />
+                      <Legend />
+                    </PieChart>
+                  ) : <EmptyChart />}
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold text-gray-800">Asset Status Breakdown</h3>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  {assetStats.statusWise.length > 0 ? (
+                    <PieChart>
+                      <Pie data={assetStats.statusWise} cx="50%" cy="50%" outerRadius={90}
+                        dataKey="count" label={({ name, count }) => `${name}: ${count}`} labelLine={false}>
+                        {assetStats.statusWise.map((e, i) => <Cell key={i} fill={e.color} />)}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  ) : <EmptyChart />}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-gray-800">Assets by Sub-Type</h3>
+                <button onClick={() => handleGenerateReport('Assets Report')}
+                  className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 transition">
+                  Export
+                </button>
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                {assetStats.subTypeWise.length > 0 ? (
+                  <BarChart data={assetStats.subTypeWise} margin={{ bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-30} textAnchor="end" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                ) : <EmptyChart />}
+              </ResponsiveContainer>
+            </div>
+
+            {/* Asset Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+              <div className="flex justify-between items-center px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-800">Asset List ({filteredAssets.length})</h3>
+                <button onClick={() => handleGenerateReport('Assets Report')}
+                  className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-blue-700 transition">
+                  Export List
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Asset Tag</th>
+                      <th className="px-4 py-3 text-left">Name</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Sub-Type</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Assigned To</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredAssets.length === 0 ? (
+                      <tr><td colSpan={6} className="text-center text-gray-400 py-8">No assets match the current filters</td></tr>
+                    ) : filteredAssets.map(a => (
+                      <tr key={a.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-blue-600">{a.asset_tag}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{a.asset_name}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${a.category === 'IT' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                            {a.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{a.sub_type}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            a.status === 'active' ? 'bg-green-100 text-green-700' :
+                            a.status === 'maintenance' ? 'bg-orange-100 text-orange-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>{a.status}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{a.assigned_to || <span className="text-gray-400">Unassigned</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== PURCHASES TAB ===== */}
+        {activeTab === 'purchases' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <StatCard label="Total Purchases" value={purchaseStats.total} color="blue" />
+              <StatCard label="Total Spend" value={formatCurrency(purchaseStats.totalSpend)} color="green" />
+              <StatCard label="Vendors" value={purchaseStats.vendorWise.length} color="purple" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold text-gray-800">Monthly Purchase Trend</h3>
+                  <button onClick={() => handleGenerateReport('Purchases Report')}
+                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 transition">Export</button>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  {purchaseStats.monthly.length > 0 ? (
+                    <AreaChart data={purchaseStats.monthly}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={v => [`₹${v.toLocaleString()}`, 'Amount']} />
+                      <Area type="monotone" dataKey="amount" fill="#dbeafe" stroke="#3b82f6" strokeWidth={2} name="Amount (₹)" />
+                    </AreaChart>
+                  ) : <EmptyChart message="No purchases in selected date range" />}
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold text-gray-800">Vendor-wise Spend</h3>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  {purchaseStats.vendorWise.length > 0 ? (
+                    <BarChart data={purchaseStats.vendorWise} margin={{ bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="vendor" angle={-30} textAnchor="end" tick={{ fontSize: 11 }} />
+                      <YAxis tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={v => [`₹${v.toLocaleString()}`, 'Spent']} />
+                      <Bar dataKey="spent" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  ) : <EmptyChart message="No vendor data available" />}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Purchases Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+              <div className="flex justify-between items-center px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-800">Purchase Orders ({purchases.length})</h3>
+                <button onClick={() => handleGenerateReport('Purchases Report')}
+                  className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-blue-700 transition">Export</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">PO ID</th>
+                      <th className="px-4 py-3 text-left">Vendor</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {purchases.length === 0 ? (
+                      <tr><td colSpan={5} className="text-center text-gray-400 py-8">No purchases found</td></tr>
+                    ) : purchases.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-blue-600">{p.purchase_id}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{p.vendor_name}</td>
+                        <td className="px-4 py-3 text-gray-600">{p.purchase_date}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-800">₹{(parseFloat(p.total_amount) || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            p.status === 'received' ? 'bg-green-100 text-green-700' :
+                            p.status === 'pending' ? 'bg-orange-100 text-orange-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{p.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== CONTRACTS TAB ===== */}
+        {activeTab === 'contracts' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard label="Total Contracts" value={contractStats.total} color="blue" />
+              <StatCard label="Active" value={contractStats.active} color="green" />
+              <StatCard label="Expiring (30 days)" value={contractStats.expiring} color="orange" />
+              <StatCard label="Expired" value={contractStats.expired} color="red" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <h3 className="font-semibold text-gray-800 mb-4">Contract Status Distribution</h3>
+                <ResponsiveContainer width="100%" height={240}>
+                  {contractStats.total > 0 ? (
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Active', value: contractStats.active, color: '#10b981' },
+                          { name: 'Expiring Soon', value: contractStats.expiring, color: '#f59e0b' },
+                          { name: 'Expired', value: contractStats.expired, color: '#ef4444' },
+                        ].filter(d => d.value > 0)}
+                        cx="50%" cy="50%" outerRadius={80}
+                        dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                        {[
+                          { name: 'Active', value: contractStats.active, color: '#10b981' },
+                          { name: 'Expiring Soon', value: contractStats.expiring, color: '#f59e0b' },
+                          { name: 'Expired', value: contractStats.expired, color: '#ef4444' },
+                        ].filter(d => d.value > 0).map((e, i) => <Cell key={i} fill={e.color} />)}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  ) : <EmptyChart message="No contracts match current filters" />}
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <h3 className="font-semibold text-gray-800 mb-4">Contracts by Vendor</h3>
+                <ResponsiveContainer width="100%" height={240}>
+                  {contractStats.vendorWise.length > 0 ? (
+                    <BarChart data={contractStats.vendorWise} margin={{ bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="vendor" angle={-30} textAnchor="end" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  ) : <EmptyChart />}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Contracts Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+              <div className="flex justify-between items-center px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-800">Contracts ({filteredContracts.length})</h3>
+                <button onClick={() => handleGenerateReport('Contracts Report')}
+                  className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-blue-700 transition">Export</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Contract ID</th>
+                      <th className="px-4 py-3 text-left">Name</th>
+                      <th className="px-4 py-3 text-left">Vendor</th>
+                      <th className="px-4 py-3 text-left">Valid Until</th>
+                      <th className="px-4 py-3 text-right">Value</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredContracts.length === 0 ? (
+                      <tr><td colSpan={6} className="text-center text-gray-400 py-8">No contracts found</td></tr>
+                    ) : filteredContracts.map(c => (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-blue-600">{c.contract_id}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{c.contract_name}</td>
+                        <td className="px-4 py-3 text-gray-600">{c.vendor_name}</td>
+                        <td className="px-4 py-3 text-gray-600">{c.active_till}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-800">₹{(parseFloat(c.contract_value) || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            c.status === 'active' ? 'bg-green-100 text-green-700' :
+                            c.status === 'expired' ? 'bg-red-100 text-red-700' :
+                            'bg-orange-100 text-orange-700'
+                          }`}>{c.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== MAINTENANCE TAB ===== */}
+        {activeTab === 'maintenance' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard label="In Maintenance" value={maintenanceStats.needingService} color="orange" />
+              <StatCard label="Retired" value={maintenanceStats.retired} color="red" />
+              <StatCard label="Active (Healthy)" value={assetStats.statusWise.find(s => s.name === 'active')?.count ?? assetStats.total - maintenanceStats.needingService - maintenanceStats.retired} color="green" />
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-gray-800">Asset Health Overview</h3>
+                <button onClick={() => handleGenerateReport('Assets Report')}
+                  className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 transition">Export</button>
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                {assetStats.statusWise.length > 0 ? (
+                  <BarChart data={assetStats.statusWise}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {assetStats.statusWise.map((e, i) => <Cell key={i} fill={e.color} />)}
+                    </Bar>
+                  </BarChart>
+                ) : <EmptyChart />}
+              </ResponsiveContainer>
+            </div>
+
+            {/* Maintenance Assets Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-800">Assets Requiring Attention</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Asset Tag</th>
+                      <th className="px-4 py-3 text-left">Name</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Assigned To</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredAssets.filter(a => a.status !== 'active').length === 0 ? (
+                      <tr><td colSpan={5} className="text-center text-gray-400 py-8">All assets are in active/healthy status</td></tr>
+                    ) : filteredAssets.filter(a => a.status !== 'active').map(a => (
+                      <tr key={a.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-blue-600">{a.asset_tag}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{a.asset_name}</td>
+                        <td className="px-4 py-3 text-gray-600">{a.category}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            a.status === 'maintenance' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'
+                          }`}>{a.status}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{a.assigned_to || <span className="text-gray-400">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== FREQUENTLY USED TAB ===== */}
+        {activeTab === 'frequently' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-semibold text-gray-800">Most Used Asset Types</h3>
+                  <button onClick={() => handleGenerateReport('Assets Report')}
+                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 transition">Export</button>
+                </div>
+                <ResponsiveContainer width="100%" height={280}>
+                  {frequentStats.mostUsedCategories.length > 0 ? (
+                    <BarChart data={frequentStats.mostUsedCategories} margin={{ bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="category" angle={-30} textAnchor="end" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="usage" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  ) : <EmptyChart />}
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+                <h3 className="font-semibold text-gray-800 mb-4">Top Asset Holders</h3>
+                <div className="space-y-3">
+                  {frequentStats.mostAssigned.length === 0 ? (
+                    <p className="text-gray-400 text-sm text-center py-8">No assigned assets found</p>
+                  ) : frequentStats.mostAssigned.map((person, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 w-4">{idx + 1}</span>
+                      <div className="flex-1">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-700">{person.name}</span>
+                          <span className="text-xs text-gray-500">{person.count} asset{person.count > 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div className="bg-blue-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${(person.count / frequentStats.maxCount) * 100}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-gray-800">Full Category Breakdown</h3>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {assetStats.subTypeWise.map((s, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">{s.name}</p>
+                    <p className="text-xl font-bold" style={{ color: COLORS[i % COLORS.length] }}>{s.count}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <ExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          reportName={selectedReport}
+          onExport={handleExport}
+        />
       </div>
     </AppLayout>
   );
