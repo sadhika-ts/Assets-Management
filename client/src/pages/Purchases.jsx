@@ -5,15 +5,14 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, X
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 
-// Status Badge (read-only, used in analytics)
 const StatusBadge = ({ status }) => {
   const styles = {
-    pending:   'bg-yellow-100 text-yellow-800',
-    ordered:   'bg-blue-100 text-blue-800',
-    received:  'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
+    pending:   'bg-amber-100 text-amber-700 ring-1 ring-amber-200',
+    ordered:   'bg-blue-100 text-blue-700 ring-1 ring-blue-200',
+    received:  'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200',
+    cancelled: 'bg-red-100 text-red-700 ring-1 ring-red-200',
   };
-  return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${styles[status] || 'bg-gray-100 text-gray-700'}`}>{status}</span>;
+  return <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${styles[status] || 'bg-gray-100 text-gray-600'}`}>{status}</span>;
 };
 
 const STATUS_OPTIONS = ['pending', 'ordered', 'received', 'cancelled'];
@@ -27,9 +26,9 @@ const STATUS_TRANSITIONS = {
 };
 
 const STATUS_STYLES = {
-  pending:   'bg-yellow-100 text-yellow-800 border-yellow-200',
+  pending:   'bg-amber-100 text-amber-800 border-amber-200',
   ordered:   'bg-blue-100 text-blue-800 border-blue-200',
-  received:  'bg-green-100 text-green-800 border-green-200',
+  received:  'bg-emerald-100 text-emerald-800 border-emerald-200',
   cancelled: 'bg-red-100 text-red-800 border-red-200',
 };
 
@@ -351,134 +350,96 @@ export const Purchases = () => {
   };
 
   return (
-    <AppLayout title="Purchase Management">
+    <AppLayout title="Purchases">
       <div className="space-y-6">
 
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-800">Purchase Orders</h2>
-          <button
-            onClick={handleAddPurchase}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-all"
-          >
-            ➕ New Purchase Order
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Purchase Orders</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{mockPurchases.length} orders total</p>
+          </div>
+          <button onClick={handleAddPurchase}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-blue-500/25">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New Order
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'overview' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📊 Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('vendors')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'vendors' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            🏢 Vendors
-          </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'analytics' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📈 Analytics
-          </button>
+        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+          {[{id:'overview',label:'Overview'},{id:'vendors',label:'Vendors'},{id:'analytics',label:'Analytics'}].map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-5 py-2.5 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${activeTab === t.id ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500">
-                <p className="text-gray-600 text-sm font-medium">Total Purchases</p>
-                <p className="text-3xl font-bold text-blue-700 mt-2">{mockPurchases.length}</p>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500">
-                <p className="text-gray-600 text-sm font-medium">Total Spent</p>
-                <p className="text-3xl font-bold text-green-700 mt-2">₹{(() => {
-                  const total = mockPurchases
-                    .filter(p => p.status !== 'cancelled')
-                    .reduce((sum, p) => {
-                      const amount = parseFloat(p.total_amount);
-                      return sum + (isNaN(amount) ? 0 : amount);
-                    }, 0);
-                  return (total >= 100000) ? (total / 100000).toFixed(1) + 'L' : total.toLocaleString();
-                })()}</p>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-purple-500">
-                <p className="text-gray-600 text-sm font-medium">Total Vendors</p>
-                <p className="text-3xl font-bold text-purple-700 mt-2">{mockVendors.length}</p>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-orange-500">
-                <p className="text-gray-600 text-sm font-medium">Pending Orders</p>
-                <p className="text-3xl font-bold text-orange-700 mt-2">{mockPurchases.filter(p => p.status === 'pending').length}</p>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-cyan-500">
-                <p className="text-gray-600 text-sm font-medium">Received</p>
-                <p className="text-3xl font-bold text-cyan-700 mt-2">{mockPurchases.filter(p => p.status === 'received').length}</p>
-              </div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              {[
+                { label: 'Total Orders', value: mockPurchases.length, cls: 'from-blue-500 to-blue-600' },
+                { label: 'Total Spent', value: '₹' + (() => { const t = mockPurchases.filter(p=>p.status!=='cancelled').reduce((s,p)=>s+(parseFloat(p.total_amount)||0),0); return t>=100000?(t/100000).toFixed(1)+'L':t.toLocaleString(); })(), cls: 'from-emerald-500 to-emerald-600' },
+                { label: 'Vendors', value: mockVendors.length, cls: 'from-purple-500 to-purple-600' },
+                { label: 'Pending', value: mockPurchases.filter(p=>p.status==='pending').length, cls: 'from-amber-500 to-amber-600' },
+                { label: 'Received', value: mockPurchases.filter(p=>p.status==='received').length, cls: 'from-teal-500 to-teal-600' },
+              ].map((s,i) => (
+                <div key={i} className={`bg-gradient-to-br ${s.cls} rounded-2xl p-4 text-white shadow-sm`}>
+                  <p className="text-white/75 text-xs font-medium uppercase tracking-wide">{s.label}</p>
+                  <p className="text-2xl font-bold mt-1">{s.value}</p>
+                </div>
+              ))}
             </div>
 
             {/* All Purchases */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">All Purchases ({filteredPurchases.length})</h3>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Search PO or vendor…"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <select
-                    value={filterStatus}
-                    onChange={e => setFilterStatus(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-gray-100">
+                <h3 className="text-base font-semibold text-gray-800">All Purchases <span className="text-gray-400 font-normal text-sm">({filteredPurchases.length})</span></h3>
+                <div className="flex gap-2 flex-wrap">
+                  <div className="relative">
+                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <input type="text" placeholder="Search PO or vendor…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 w-44" />
+                  </div>
+                  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50">
                     <option value="all">All Status</option>
-                    {STATUS_OPTIONS.map(s => (
-                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                    ))}
+                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
                   </select>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">PO ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                      {['PO ID','Vendor','Date','Amount','Status'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredPurchases.length === 0 ? (
-                      <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">No purchases found</td></tr>
-                    ) : filteredPurchases.map(purchase => {
-                      const amount = parseFloat(purchase.total_amount) || 0;
-                      const formattedAmount = amount >= 100000 ? (amount / 100000).toFixed(2) + 'L' : amount.toLocaleString();
-                      return (
-                        <tr key={purchase.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 font-mono font-semibold text-blue-600">{purchase.purchase_id}</td>
-                          <td className="px-6 py-4 text-gray-700">{purchase.vendor_name}</td>
-                          <td className="px-6 py-4 text-gray-600">{new Date(purchase.purchase_date).toLocaleDateString('en-IN')}</td>
-                          <td className="px-6 py-4 font-medium text-gray-900">₹{formattedAmount}</td>
-                          <td className="px-6 py-4">
-                            <StatusDropdown
-                              purchase={purchase}
-                              onStatusChange={handleStatusChange}
-                              updating={updatingId === purchase.id}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredPurchases.length === 0
+                      ? <tr><td colSpan={5} className="px-4 py-16 text-center text-gray-400">No purchases found</td></tr>
+                      : filteredPurchases.map(p => {
+                          const amt = parseFloat(p.total_amount) || 0;
+                          const fmt = amt >= 100000 ? (amt/100000).toFixed(2)+'L' : amt.toLocaleString();
+                          return (
+                            <tr key={p.id} className="hover:bg-blue-50/20 transition-colors">
+                              <td className="px-4 py-3 font-mono font-semibold text-blue-600">{p.purchase_id}</td>
+                              <td className="px-4 py-3 font-medium text-gray-800">{p.vendor_name}</td>
+                              <td className="px-4 py-3 text-gray-500">{new Date(p.purchase_date).toLocaleDateString('en-IN')}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-900">₹{fmt}</td>
+                              <td className="px-4 py-3">
+                                <StatusDropdown purchase={p} onStatusChange={handleStatusChange} updating={updatingId === p.id} />
+                              </td>
+                            </tr>
+                          );
+                        })
+                    }
                   </tbody>
                 </table>
               </div>
@@ -490,29 +451,28 @@ export const Purchases = () => {
 
         {/* VENDORS TAB */}
         {activeTab === 'vendors' && (
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">All Vendors ({mockVendors.length})</h3>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-800">Vendors <span className="text-gray-400 font-normal text-sm">({mockVendors.length})</span></h3>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Vendor Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Address</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Total Orders</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Total Spent</th>
+                    {['Vendor Name','Contact','Email','Address','Orders','Total Spent'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {mockVendors.map(vendor => (
-                    <tr key={vendor.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">{vendor.name}</td>
-                      <td className="px-6 py-4 text-gray-700">{vendor.contact}</td>
-                      <td className="px-6 py-4 text-gray-700">{vendor.email}</td>
-                      <td className="px-6 py-4 text-gray-700">{vendor.address}</td>
-                      <td className="px-6 py-4 text-gray-700">{vendor.totalPurchases}</td>
-                      <td className="px-6 py-4 font-medium text-gray-900">₹{(vendor.totalSpent >= 100000) ? (vendor.totalSpent / 100000).toFixed(2) + 'L' : vendor.totalSpent.toLocaleString()}</td>
+                <tbody className="divide-y divide-gray-50">
+                  {mockVendors.map(v => (
+                    <tr key={v.id} className="hover:bg-blue-50/20 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-gray-800">{v.name}</td>
+                      <td className="px-4 py-3 text-gray-600">{v.contact}</td>
+                      <td className="px-4 py-3 text-gray-600">{v.email}</td>
+                      <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{v.address}</td>
+                      <td className="px-4 py-3 text-gray-600">{v.totalPurchases}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900">₹{v.totalSpent>=100000?(v.totalSpent/100000).toFixed(2)+'L':v.totalSpent.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -612,21 +572,18 @@ export const Purchases = () => {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
+        {/* Delete modal */}
         {showDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-lg font-bold text-gray-800 mb-2">Delete Purchase Order</h2>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete <span className="font-semibold">{deleteTarget?.poId}</span>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
-                  Cancel
-                </button>
-                <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                  Delete
-                </button>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 text-center mb-1">Delete Purchase Order</h2>
+              <p className="text-gray-500 text-sm text-center mb-6">Are you sure you want to delete <span className="font-semibold text-gray-800">{deleteTarget?.poId}</span>? This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowDeleteModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium text-sm transition-colors">Cancel</button>
+                <button onClick={confirmDelete} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium text-sm transition-colors">Delete</button>
               </div>
             </div>
           </div>

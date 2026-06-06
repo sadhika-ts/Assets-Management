@@ -17,13 +17,13 @@ const StatusBadge = ({ status }) => {
 };
 
 // Contract Card
-const ContractCard = ({ contract, onView, onRenew, onDelete }) => {
+const ContractCard = ({ contract, onView, onRenew }) => {
   const daysUntilExpiry = Math.ceil((new Date(contract.active_till) - new Date()) / (1000 * 60 * 60 * 24));
   const isExpiringSoon = daysUntilExpiry <= 30 && daysUntilExpiry > 0;
   const isExpired = daysUntilExpiry < 0;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all">
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="font-bold text-gray-800">{contract.contract_name}</h3>
@@ -54,12 +54,6 @@ const ContractCard = ({ contract, onView, onRenew, onDelete }) => {
         >
           Renew
         </button>
-        <button
-          onClick={() => onDelete(contract.id, contract.contract_id)}
-          className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 transition text-sm font-medium"
-        >
-          Delete
-        </button>
       </div>
     </div>
   );
@@ -83,8 +77,6 @@ export const Contracts = () => {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('card');
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showRenewalModal, setShowRenewalModal] = useState(false);
@@ -189,22 +181,6 @@ export const Contracts = () => {
     }
   };
 
-  const handleDeleteContract = (id, contractId) => {
-    setDeleteTarget({ id, contractId });
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    try {
-      await api.delete(`/contracts/${deleteTarget.id}`);
-      toast.success(`Contract ${deleteTarget.contractId} deleted`);
-      setMockContracts(prev => prev.filter(c => c.id !== deleteTarget.id));
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete contract');
-    }
-    setShowDeleteModal(false);
-    setDeleteTarget(null);
-  };
 
   const handleRenewContract = (id, contractId) => {
     const contract = mockContracts.find(c => c.id === id);
@@ -269,35 +245,32 @@ export const Contracts = () => {
       <div className="space-y-6">
 
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-800">Contracts</h2>
-          <button
-            onClick={handleAddContract}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-all"
-          >
-            ➕ New Contract
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Contracts</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{mockContracts.length} contracts total</p>
+          </div>
+          <button onClick={handleAddContract}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-blue-500/25">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New Contract
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'overview' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📊 Overview
+        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+          <button onClick={() => setActiveTab('overview')}
+            className={`px-5 py-2.5 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${activeTab === 'overview' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
+            Overview
           </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'analytics' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📈 Analytics
+          <button onClick={() => setActiveTab('analytics')}
+            className={`px-5 py-2.5 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${activeTab === 'analytics' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
+            Analytics
           </button>
           <button
             onClick={() => setActiveTab('documents')}
-            className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'documents' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
-          >
-            📄 Documents
+            className={`px-5 py-2.5 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${activeTab === 'documents' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
+            Documents
           </button>
         </div>
 
@@ -323,7 +296,7 @@ export const Contracts = () => {
             </div>
 
             {/* All Contracts Table */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="bg-white rounded-2xl shadow-sm p-5">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">All Contracts ({mockContracts.length})</h3>
                 <div className="flex gap-3">
@@ -378,7 +351,6 @@ export const Contracts = () => {
                           <div className="flex gap-3">
                             <button onClick={() => handleViewContract(contract.id)} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View</button>
                             <button onClick={() => handleRenewContract(contract.id, contract.contract_id)} className="text-green-600 hover:text-green-800 font-medium text-xs">Renew</button>
-                            <button onClick={() => handleDeleteContract(contract.id, contract.contract_id)} className="text-red-600 hover:text-red-800 font-medium text-xs">Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -394,7 +366,7 @@ export const Contracts = () => {
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             {/* Contract Timeline */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="bg-white rounded-2xl shadow-sm p-5">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 Contract Timeline</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={contractTimelineData}>
@@ -411,7 +383,7 @@ export const Contracts = () => {
 
             {/* Value Distribution */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="bg-white rounded-2xl shadow-sm p-5">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">💰 Contract Value Distribution</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
@@ -434,7 +406,7 @@ export const Contracts = () => {
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="bg-white rounded-2xl shadow-sm p-5">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">🏢 Vendor Contracts</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={vendorContracts}>
@@ -484,7 +456,7 @@ export const Contracts = () => {
         {/* DOCUMENTS TAB */}
         {activeTab === 'documents' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="bg-white rounded-2xl shadow-sm p-5">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">📄 Contract Documents</h3>
               <div className="space-y-4">
                 {mockContracts.map(contract => (
@@ -517,30 +489,11 @@ export const Contracts = () => {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-lg font-bold text-gray-800 mb-2">Delete Contract</h2>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete <span className="font-semibold">{deleteTarget?.contractId}</span>? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
-                  Cancel
-                </button>
-                <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Renewal Modal */}
         {showRenewalModal && renewalTarget && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
               <h2 className="text-lg font-bold text-gray-800 mb-1">Renew Contract</h2>
               <p className="text-sm text-gray-500 mb-4">{renewalTarget.contractId} — {renewalTarget.contract?.contract_name}</p>
               <div className="mb-2 text-sm text-gray-600">
@@ -573,8 +526,8 @@ export const Contracts = () => {
 
         {/* View Contract Modal */}
         {showViewModal && viewContract && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full mx-4">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h2 className="text-lg font-bold text-gray-800">{viewContract.contract_name}</h2>
@@ -607,10 +560,6 @@ export const Contracts = () => {
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                   Renew
                 </button>
-                <button onClick={() => { setShowViewModal(false); handleDeleteContract(viewContract.id, viewContract.contract_id); }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                  Delete
-                </button>
               </div>
             </div>
           </div>
@@ -618,8 +567,8 @@ export const Contracts = () => {
 
         {/* Upload Document Modal */}
         {showUploadModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
               <h2 className="text-lg font-bold text-gray-800 mb-4">Upload Contract Document</h2>
               <div className="space-y-4">
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition">

@@ -26,9 +26,7 @@ export const ContractForm = () => {
     currency: 'INR',
     payment_terms: '',
     renewal_cost: '',
-    status: 'Active',
-    auto_renewal: false,
-    renewal_reminder_days: '30',
+    status: '',
     description: '',
     document_path: '',
     linked_assets: []
@@ -39,6 +37,38 @@ export const ContractForm = () => {
   const [availableAssets, setAvailableAssets] = useState([]);
   const [generatedContractId, setGeneratedContractId] = useState(null);
   const { vendors } = useVendors();
+
+  // Load assets for Asset Association section
+  useEffect(() => {
+    api.get('/assets?limit=500').then(res => {
+      const list = res.data?.data?.assets || [];
+      setAvailableAssets(list.filter(a => a.status === 'active'));
+    }).catch(() => {});
+  }, []);
+
+  // Load existing contract in edit mode
+  useEffect(() => {
+    if (!isEditMode) return;
+    api.get(`/contracts/${id}`).then(res => {
+      const c = res.data?.data?.contract;
+      if (!c) return;
+      setFormData(prev => ({
+        ...prev,
+        contract_name: c.contract_name || '',
+        vendor_name: c.vendor_name || '',
+        vendor_contact_person: c.vendor_contact_person || '',
+        vendor_email: c.vendor_email || '',
+        vendor_phone: c.vendor_phone || c.vendor_contact || '',
+        vendor_address: c.vendor_address || '',
+        active_from: c.active_from ? c.active_from.split('T')[0] : prev.active_from,
+        active_till: c.active_till ? c.active_till.split('T')[0] : '',
+        contract_value: c.contract_value || '',
+        description: c.description || '',
+        status: c.status || '',
+      }));
+      setGeneratedContractId(c.contract_id);
+    }).catch(() => toast.error('Failed to load contract'));
+  }, [id, isEditMode]);
 
   const handleSelectVendor = (vendor) => {
     setFormData(prev => ({
@@ -52,34 +82,27 @@ export const ContractForm = () => {
     setErrors(prev => ({ ...prev, vendor_name: '', vendor_phone: '', vendor_email: '' }));
   };
 
-  // Calculate remaining days
+  // Calculate remaining days (can be negative for expired)
   const calculateRemainingDays = () => {
-    if (!formData.active_till) return 0;
-    const today = new Date();
-    const endDate = new Date(formData.active_till);
-    const diffTime = endDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return Math.max(0, diffDays);
+    if (!formData.active_till) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const endDate = new Date(formData.active_till); endDate.setHours(0, 0, 0, 0);
+    return Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
   };
 
-  // Auto-update status based on dates
+  // Auto-update status based on dates (uses DB-compatible lowercase values)
   useEffect(() => {
-    const remaining = calculateRemainingDays();
-    let newStatus = 'Active';
-
-    if (remaining < 0) {
-      newStatus = 'Expired';
-    } else if (remaining === 0) {
-      newStatus = 'Expiring Soon';
-    } else if (remaining <= 30) {
-      newStatus = 'Expiring Soon';
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      status: newStatus
-    }));
-  }, [formData.active_till]);
+    if (!formData.active_till) return;
+    const days = calculateRemainingDays();
+    const activeFrom = new Date(formData.active_from); activeFrom.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let newStatus;
+    if (days < 0) newStatus = 'expired';
+    else if (activeFrom > today) newStatus = 'upcoming';
+    else if (days <= 30) newStatus = 'expiring_soon';
+    else newStatus = 'active';
+    setFormData(prev => ({ ...prev, status: newStatus }));
+  }, [formData.active_till, formData.active_from]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -97,10 +120,6 @@ export const ContractForm = () => {
     // Conditional validation
     if (formData.contract_type === 'Other' && !formData.contract_type_description.trim()) {
       newErrors.contract_type_description = 'Contract type description is required';
-    }
-
-    if (formData.auto_renewal && !formData.renewal_reminder_days) {
-      newErrors.renewal_reminder_days = 'Renewal reminder days is required';
     }
 
     // Date validation
@@ -246,6 +265,13 @@ export const ContractForm = () => {
   };
 
   const remainingDays = calculateRemainingDays();
+  const statusLabel = { active: 'Active', expiring_soon: 'Expiring Soon', expired: 'Expired', upcoming: 'Upcoming' };
+  const statusColor = {
+    active: 'border-green-500 bg-green-50 text-green-700',
+    expiring_soon: 'border-orange-500 bg-orange-50 text-orange-700',
+    expired: 'border-red-500 bg-red-50 text-red-700',
+    upcoming: 'border-blue-500 bg-blue-50 text-blue-700',
+  };
 
   return (
     <AppLayout title={isEditMode ? 'Edit Contract' : 'New Contract'}>
@@ -265,7 +291,7 @@ export const ContractForm = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
 
           {/* Section 1: Basic Information */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">1</span>
               Basic Information
@@ -331,7 +357,7 @@ export const ContractForm = () => {
           </div>
 
           {/* Section 2: Vendor Information */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-green-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">2</span>
               Vendor Information
@@ -420,7 +446,7 @@ export const ContractForm = () => {
           </div>
 
           {/* Section 3: Contract Duration */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-purple-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">3</span>
               Contract Duration
@@ -458,7 +484,7 @@ export const ContractForm = () => {
               </div>
 
               {/* Remaining Days (Read-only) */}
-              {formData.active_till && (
+              {formData.active_till && remainingDays !== null && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Remaining Days
@@ -468,29 +494,27 @@ export const ContractForm = () => {
                     remainingDays <= 30 ? 'border-orange-500 bg-orange-50 text-orange-700' :
                     'border-green-500 bg-green-50 text-green-700'
                   }`}>
-                    {remainingDays < 0 ? `Expired ${Math.abs(remainingDays)} days ago` : `${remainingDays} days`}
+                    {remainingDays < 0 ? `Expired ${Math.abs(remainingDays)} days ago` : `${remainingDays} days remaining`}
                   </div>
                 </div>
               )}
 
               {/* Status (Read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status (Auto-updated)
-                </label>
-                <div className={`px-4 py-2 rounded-lg border-2 font-semibold ${
-                  formData.status === 'Expired' ? 'border-red-500 bg-red-50 text-red-700' :
-                  formData.status === 'Expiring Soon' ? 'border-orange-500 bg-orange-50 text-orange-700' :
-                  'border-green-500 bg-green-50 text-green-700'
-                }`}>
-                  {formData.status}
+              {formData.status && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status (Auto-updated)
+                  </label>
+                  <div className={`px-4 py-2 rounded-lg border-2 font-semibold ${statusColor[formData.status] || 'border-gray-300 bg-gray-50 text-gray-600'}`}>
+                    {statusLabel[formData.status] || formData.status}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
           {/* Section 4: Financial Details */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-orange-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">4</span>
               Financial Details
@@ -562,89 +586,56 @@ export const ContractForm = () => {
             </div>
           </div>
 
-          {/* Section 5: Renewal Information */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          {/* Section 5: Asset Association */}
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">5</span>
-              Renewal Information
-            </h3>
-
-            <div className="space-y-4">
-              {/* Auto Renewal */}
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="auto_renewal"
-                  checked={formData.auto_renewal}
-                  onChange={handleInputChange}
-                  className="w-4 h-4 rounded border-gray-300"
-                />
-                <label className="ml-3 text-sm font-medium text-gray-700">
-                  Enable Auto Renewal
-                </label>
-              </div>
-
-              {/* Renewal Reminder (if auto renewal enabled) */}
-              {formData.auto_renewal && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Renewal Reminder Days Before Expiry <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="renewal_reminder_days"
-                    value={formData.renewal_reminder_days}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.renewal_reminder_days ? 'border-red-500' : 'border-gray-300'}`}
-                  >
-                    <option value="7">7 Days</option>
-                    <option value="15">15 Days</option>
-                    <option value="30">30 Days</option>
-                    <option value="60">60 Days</option>
-                  </select>
-                  {errors.renewal_reminder_days && <p className="text-red-500 text-xs mt-1">{errors.renewal_reminder_days}</p>}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Section 6: Asset Association */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-pink-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">6</span>
+              <span className="bg-pink-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">5</span>
               Asset Association
             </h3>
 
-            <label className="block text-sm font-medium text-gray-700 mb-4">
-              Link Assets to This Contract (Multiple selection allowed)
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Link Assets to This Contract <span className="text-gray-400 font-normal text-xs">(Multiple selection allowed)</span>
             </label>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {availableAssets.map(asset => (
-                <div key={asset.id} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-blue-50">
-                  <input
-                    type="checkbox"
-                    id={`asset-${asset.id}`}
-                    checked={formData.linked_assets.includes(asset.id)}
-                    onChange={() => handleAssetSelection(asset.id)}
-                    className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                  />
-                  <label htmlFor={`asset-${asset.id}`} className="ml-3 flex-1 cursor-pointer">
-                    <span className="font-medium text-gray-800">{asset.asset_name}</span>
-                    <span className="text-xs text-gray-600 block">{asset.asset_tag}</span>
-                  </label>
+            {availableAssets.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center border border-dashed border-gray-200 rounded-lg">No active assets available</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {availableAssets.map(asset => (
+                    <div key={asset.id}
+                      onClick={() => handleAssetSelection(asset.id)}
+                      className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
+                        formData.linked_assets.includes(asset.id)
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}>
+                      <input
+                        type="checkbox"
+                        id={`asset-${asset.id}`}
+                        checked={formData.linked_assets.includes(asset.id)}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded border-gray-300 cursor-pointer"
+                      />
+                      <label htmlFor={`asset-${asset.id}`} className="ml-3 flex-1 cursor-pointer">
+                        <span className="font-medium text-gray-800 text-sm">{asset.asset_name}</span>
+                        <span className="text-xs text-gray-500 block">{asset.asset_tag} · {asset.sub_type}</span>
+                      </label>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            {formData.linked_assets.length > 0 && (
-              <p className="text-sm text-gray-600 mt-4">
-                {formData.linked_assets.length} asset(s) selected
-              </p>
+                {formData.linked_assets.length > 0 && (
+                  <p className="text-sm text-blue-600 font-medium mt-3">
+                    {formData.linked_assets.length} asset(s) selected
+                  </p>
+                )}
+              </>
             )}
           </div>
 
-          {/* Section 7: Contract Description */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          {/* Section 6: Contract Description */}
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-cyan-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">7</span>
+              <span className="bg-cyan-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">6</span>
               Contract Description
             </h3>
 
@@ -658,10 +649,10 @@ export const ContractForm = () => {
             />
           </div>
 
-          {/* Section 8: Document Upload */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          {/* Section 7: Document Upload */}
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="bg-teal-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">8</span>
+              <span className="bg-teal-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">7</span>
               Document Upload
             </h3>
 

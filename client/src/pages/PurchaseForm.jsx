@@ -113,7 +113,7 @@ export const PurchaseForm = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
 
           {/* Section 1: Purchase Information */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">1</span>
               Purchase Information
@@ -154,7 +154,7 @@ export const PurchaseForm = () => {
           </div>
 
           {/* Section 2: Vendor Information */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-green-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">2</span>
               Vendor Information
@@ -202,7 +202,7 @@ export const PurchaseForm = () => {
           </div>
 
           {/* Section 3: Shipping & Billing */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
               <span className="bg-purple-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">3</span>
               Shipping & Billing Information

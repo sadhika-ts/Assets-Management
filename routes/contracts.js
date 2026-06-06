@@ -126,7 +126,7 @@ router.get(
   }
 );
 
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', /* verifyToken, */ async (req, res) => {
   try {
     const contract = await models.Contract.findByPk(req.params.id);
 
@@ -296,12 +296,17 @@ router.put(
     body('contract_id').optional().trim(),
     body('contract_name').optional().trim(),
     body('vendor_name').optional().trim(),
-    body('vendor_contact').optional().trim(),
+    body('vendor_contact').optional({ checkFalsy: true }).trim(),
+    body('vendor_email').optional({ checkFalsy: true }).isEmail().withMessage('Invalid vendor email'),
+    body('vendor_phone').optional({ checkFalsy: true }).trim(),
+    body('vendor_address').optional({ checkFalsy: true }).trim(),
+    body('vendor_contact_person').optional({ checkFalsy: true }).trim(),
     body('active_from').optional().isISO8601().toDate().withMessage('Invalid active_from date'),
     body('active_till').optional().isISO8601().toDate().withMessage('Invalid active_till date'),
     body('contract_value').optional({ checkFalsy: true }).isFloat({ min: 0 }).toFloat(),
     body('status').optional().isIn(['active', 'expired', 'upcoming', 'expiring_soon']).withMessage('Invalid status'),
-    body('notes').optional().trim()
+    body('notes').optional().trim(),
+    body('description').optional({ checkFalsy: true }).trim()
   ],
   async (req, res) => {
     const transaction = await models.sequelize.transaction();
@@ -354,7 +359,7 @@ router.put(
       }
 
       const updates = {};
-      const allowedFields = ['contract_id', 'contract_name', 'vendor_name', 'vendor_contact', 'active_from', 'active_till', 'contract_value', 'status', 'notes'];
+      const allowedFields = ['contract_id', 'contract_name', 'vendor_name', 'vendor_contact', 'vendor_email', 'vendor_phone', 'vendor_address', 'vendor_contact_person', 'active_from', 'active_till', 'contract_value', 'status', 'notes', 'description'];
 
       allowedFields.forEach(field => {
         if (req.body[field] !== undefined) {

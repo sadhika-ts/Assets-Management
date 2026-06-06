@@ -390,7 +390,7 @@ export const AssetForm = () => {
     <AppLayout title={isEditMode ? 'Edit Asset' : 'Add Asset'}>
       <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl">
         {/* SECTION 1 - Basic Info */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-bold text-gray-800 mb-6">Basic Information</h3>
 
           <div className="grid grid-cols-2 gap-6">
@@ -659,7 +659,7 @@ export const AssetForm = () => {
 
         {/* SECTION 2 - Technical Details (IT only) */}
         {selectedCategory === 'IT' && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-6">Technical Details</h3>
 
             <div className="space-y-6">

@@ -42,9 +42,9 @@ const StatCard = ({ label, value, color, icon, sub, onClick }) => {
 };
 
 const Card = ({ title, children, action }) => (
-  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+  <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700/50 p-5">
     <div className="flex items-center justify-between mb-4">
-      <h3 className="text-base font-semibold text-gray-800">{title}</h3>
+      <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100">{title}</h3>
       {action}
     </div>
     {children}
