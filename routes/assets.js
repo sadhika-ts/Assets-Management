@@ -84,7 +84,7 @@ router.get(
     query('status').optional().isIn(['active', 'inactive', 'retired']).withMessage('Invalid status'),
     query('search').optional().trim(),
     query('page').optional().isInt({ min: 1 }).toInt(),
-    query('limit').optional().isInt({ min: 1, max: 100 }).toInt()
+    query('limit').optional().isInt({ min: 1, max: 500 }).toInt()
   ],
   async (req, res) => {
     try {

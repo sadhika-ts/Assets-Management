@@ -1,363 +1,461 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import toast from 'react-hot-toast';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
 import api from '../api/axios';
 
-// Stat Card Component
-const StatCard = ({ label, value, color, icon, onClick, trend }) => {
-  const colorClasses = {
-    blue: 'border-l-blue-500 bg-blue-50',
-    purple: 'border-l-purple-500 bg-purple-50',
-    green: 'border-l-green-500 bg-green-50',
-    orange: 'border-l-orange-500 bg-orange-50',
-    red: 'border-l-red-500 bg-red-50',
-    cyan: 'border-l-cyan-500 bg-cyan-50',
-    pink: 'border-l-pink-500 bg-pink-50',
-    indigo: 'border-l-indigo-500 bg-indigo-50',
-    teal: 'border-l-teal-500 bg-teal-50'
-  };
+// ── Small reusable components ────────────────────────────────────
 
-  const textColorClasses = {
-    blue: 'text-blue-700',
-    purple: 'text-purple-700',
-    green: 'text-green-700',
-    orange: 'text-orange-700',
-    red: 'text-red-700',
-    cyan: 'text-cyan-700',
+const StatCard = ({ label, value, color, icon, sub, onClick }) => {
+  const border = {
+    blue: 'border-l-blue-500', purple: 'border-l-purple-500',
+    green: 'border-l-green-500', orange: 'border-l-orange-500',
+    red: 'border-l-red-500', cyan: 'border-l-cyan-500',
+    indigo: 'border-l-indigo-500', teal: 'border-l-teal-500',
+    pink: 'border-l-pink-500',
+  };
+  const text = {
+    blue: 'text-blue-700', purple: 'text-purple-700',
+    green: 'text-green-700', orange: 'text-orange-700',
+    red: 'text-red-700', cyan: 'text-cyan-700',
+    indigo: 'text-indigo-700', teal: 'text-teal-700',
     pink: 'text-pink-700',
-    indigo: 'text-indigo-700',
-    teal: 'text-teal-700'
   };
-
   return (
     <div
       onClick={onClick}
-      className={`bg-white p-6 rounded-lg shadow-sm border-l-4 transition-all ${colorClasses[color]} ${onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-1' : ''}`}
+      className={`bg-white p-5 rounded-xl shadow-sm border-l-4 ${border[color]} ${onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all' : ''}`}
     >
       <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <p className="text-gray-600 text-sm font-medium">{label}</p>
-          <p className={`text-3xl font-bold mt-2 ${textColorClasses[color]}`}>{value}</p>
-          {trend && <p className="text-xs text-green-600 mt-2">↑ {trend} from last month</p>}
+        <div>
+          <p className="text-gray-500 text-sm font-medium">{label}</p>
+          <p className={`text-3xl font-bold mt-1 ${text[color]}`}>{value}</p>
+          {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
         </div>
-        {icon && <div className="text-5xl ml-4">{icon}</div>}
+        <span className="text-4xl opacity-80">{icon}</span>
       </div>
     </div>
   );
 };
 
-
-// Chart Card Component
-const ChartCard = ({ title, children }) => (
-  <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-    <h3 className="text-lg font-semibold text-gray-800 mb-4">{title}</h3>
+const Card = ({ title, children, action }) => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-base font-semibold text-gray-800">{title}</h3>
+      {action}
+    </div>
     {children}
   </div>
 );
 
-// Recent Activity Item
-const ActivityItem = ({ type, title, date, icon, color }) => {
-  return (
-    <div className="flex items-start gap-3 pb-4 border-b border-gray-200 last:border-0">
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-${color}-100`}>
-        <span className="text-lg">{icon}</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
-        <p className="text-xs text-gray-500 mt-1">{type} • {date}</p>
-      </div>
-    </div>
-  );
+const EmptyState = ({ msg }) => (
+  <div className="flex flex-col items-center justify-center h-32 text-gray-400 text-sm">{msg}</div>
+);
+
+const StatusDot = ({ status }) => {
+  const c = { active: 'bg-green-500', inactive: 'bg-red-400', retired: 'bg-gray-400', expiring_soon: 'bg-orange-400' };
+  return <span className={`inline-block w-2 h-2 rounded-full ${c[status] || 'bg-gray-300'} mr-2`} />;
 };
 
+// ── Main component ───────────────────────────────────────────────
+
 export const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState({
-    totalAssets: 0,
-    itAssets: 0,
-    nonItAssets: 0,
-    activeContracts: 0,
-    expiringContracts: 0,
-    purchasedThisMonth: 0,
-    underWarranty: 0,
-    assignedAssets: 0,
-    inStock: 0,
-    needingMaintenance: 0
-  });
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [assets, setAssets] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [contracts, setContracts] = useState([]);
 
   useEffect(() => {
-    fetchDashboardData();
+    const load = async () => {
+      try {
+        const [aRes, pRes, cRes] = await Promise.allSettled([
+          api.get('/assets?limit=500'),
+          api.get('/purchases?limit=500'),
+          api.get('/contracts?limit=500'),
+        ]);
+        if (aRes.status === 'fulfilled') {
+          const d = aRes.value.data?.data;
+          setAssets(Array.isArray(d?.assets) ? d.assets : Array.isArray(d) ? d : []);
+        }
+        if (pRes.status === 'fulfilled') {
+          const d = pRes.value.data?.data;
+          setPurchases(Array.isArray(d?.purchases) ? d.purchases : Array.isArray(d) ? d : []);
+        }
+        if (cRes.status === 'fulfilled') {
+          const d = cRes.value.data?.data;
+          setContracts(Array.isArray(d?.contracts) ? d.contracts : Array.isArray(d) ? d : []);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      const response = await api.get('/api/reports/dashboard');
-      setMetrics(response.data || metrics);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      setLoading(false);
+  // ── Derived metrics ──────────────────────────────────────────
+  const metrics = useMemo(() => {
+    const total = assets.length;
+    const it = assets.filter(a => a.category === 'IT').length;
+    const nonIt = assets.filter(a => a.category === 'Non-IT').length;
+    const active = assets.filter(a => a.status === 'active').length;
+    const inactive = assets.filter(a => a.status === 'inactive').length;
+    const retired = assets.filter(a => a.status === 'retired').length;
+    const assigned = assets.filter(a => a.assigned_to && a.assigned_to.trim()).length;
+    const unassigned = active - assigned < 0 ? 0 : active - assigned;
+
+    const today = new Date();
+    const in30 = new Date(); in30.setDate(today.getDate() + 30);
+    const activeContracts = contracts.filter(c => c.status === 'active').length;
+    const expiringContracts = contracts.filter(c => {
+      const till = new Date(c.active_till);
+      return till >= today && till <= in30;
+    }).length + contracts.filter(c => c.status === 'expiring_soon').length;
+    const contractValue = contracts.reduce((s, c) => s + (parseFloat(c.contract_value) || 0), 0);
+
+    const thisMonth = new Date(); thisMonth.setDate(1); thisMonth.setHours(0, 0, 0, 0);
+    const purchasesThisMonth = purchases.filter(p => new Date(p.purchase_date) >= thisMonth).length;
+    const totalSpend = purchases.reduce((s, p) => s + (parseFloat(p.total_amount) || 0), 0);
+
+    return {
+      total, it, nonIt, active, inactive, retired,
+      assigned, unassigned,
+      activeContracts, expiringContracts, contractValue,
+      purchasesThisMonth, totalSpend,
+    };
+  }, [assets, purchases, contracts]);
+
+  // ── Chart data ───────────────────────────────────────────────
+
+  // Pie: Assets by category
+  const categoryPie = useMemo(() => {
+    const map = {};
+    assets.forEach(a => { map[a.category] = (map[a.category] || 0) + 1; });
+    const colors = ['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#06b6d4'];
+    return Object.entries(map).map(([name, value], i) => ({ name, value, color: colors[i % colors.length] }));
+  }, [assets]);
+
+  // Pie: Asset health (active/inactive/retired)
+  const healthPie = useMemo(() => [
+    { name: 'Active', value: metrics.active, color: '#22c55e' },
+    { name: 'Inactive', value: metrics.inactive, color: '#ef4444' },
+    { name: 'Retired', value: metrics.retired, color: '#9ca3af' },
+  ].filter(d => d.value > 0), [metrics]);
+
+  // Bar: Top sub-types
+  const subTypeBar = useMemo(() => {
+    const map = {};
+    assets.forEach(a => { if (a.sub_type) map[a.sub_type] = (map[a.sub_type] || 0) + 1; });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 7)
+      .map(([name, value]) => ({ name, value }));
+  }, [assets]);
+
+  // Area: Purchase spend by month (last 6 months)
+  const spendTrend = useMemo(() => {
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      months.push({
+        label: d.toLocaleString('default', { month: 'short', year: '2-digit' }),
+        year: d.getFullYear(),
+        month: d.getMonth(),
+        spend: 0,
+        count: 0,
+      });
     }
-  };
+    purchases.forEach(p => {
+      const d = new Date(p.purchase_date);
+      const m = months.find(x => x.year === d.getFullYear() && x.month === d.getMonth());
+      if (m) { m.spend += parseFloat(p.total_amount) || 0; m.count += 1; }
+    });
+    return months.map(m => ({ month: m.label, spend: Math.round(m.spend), orders: m.count }));
+  }, [purchases]);
 
-  // Chart Data: Assets by Category
-  const assetsByCategory = [];
+  // ── Recent items ─────────────────────────────────────────────
+  const recentAssets = useMemo(() =>
+    [...assets].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
+    [assets]);
 
-  // Chart Data: Assets by Department
-  const assetsByDepartment = [];
+  const recentPurchases = useMemo(() =>
+    [...purchases].sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date)).slice(0, 5),
+    [purchases]);
 
-  // Chart Data: Purchase Trend (Last 6 months)
-  const purchaseTrend = [];
+  const expiringContractsList = useMemo(() => {
+    const today = new Date();
+    const in60 = new Date(); in60.setDate(today.getDate() + 60);
+    return contracts
+      .filter(c => {
+        const till = new Date(c.active_till);
+        return (till >= today && till <= in60) || c.status === 'expiring_soon';
+      })
+      .sort((a, b) => new Date(a.active_till) - new Date(b.active_till))
+      .slice(0, 5);
+  }, [contracts]);
 
-  // Chart Data: Contract Expiry Timeline
-  const contractTimeline = [];
+  const fmtCurrency = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const daysLeft = (till) => Math.ceil((new Date(till) - new Date()) / 86400000);
 
-  // Chart Data: Asset Health Status
-  const assetHealth = [];
-
-  // Recent Activities
-  const recentActivities = {
-    added: [],
-    purchased: [
-      { id: 2, title: 'Keyboard Mechanical RGB', date: '1 day ago', icon: '⌨️', color: 'purple' },
-      { id: 3, title: 'Router WiFi 6', date: '2 days ago', icon: '📡', color: 'pink' }
-    ],
-    updated: [
-      { id: 1, title: 'Asset LAP-001 warranty', date: '4 hours ago', icon: '✏️', color: 'indigo' },
-      { id: 2, title: 'Contract renewal - ABC Corp', date: '1 day ago', icon: '📋', color: 'teal' },
-      { id: 3, title: 'Asset assignment to John Doe', date: '2 days ago', icon: '👤', color: 'pink' }
-    ]
-  };
-
+  if (loading) {
+    return (
+      <AppLayout title="Dashboard">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout title="Dashboard">
-      <div className="space-y-8">
+      <div className="space-y-7">
 
-        {/* Key Metrics - Grid 1 (5 Cards) */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">Key Metrics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard label="Total Assets" value={metrics.totalAssets} color="blue" icon="📦" trend="12" />
-            <StatCard label="IT Assets" value={metrics.itAssets} color="purple" icon="💻" trend="8" />
-            <StatCard label="Non-IT Assets" value={metrics.nonItAssets} color="green" icon="🪑" trend="4" />
-            <StatCard label="Active Contracts" value={metrics.activeContracts} color="orange" icon="📋" trend="2" />
-            <StatCard label="Expiring Soon" value={metrics.expiringContracts} color="red" icon="⚠️" />
+        {/* ── Top summary banner ── */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl p-6 shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Asset Inventory Overview</h2>
+              <p className="text-blue-200 text-sm mt-1">Last updated: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div>
+                <p className="text-blue-200 text-xs uppercase tracking-wide">Total Assets</p>
+                <p className="text-3xl font-bold">{metrics.total}</p>
+              </div>
+              <div>
+                <p className="text-blue-200 text-xs uppercase tracking-wide">Total Spend</p>
+                <p className="text-3xl font-bold">{fmtCurrency(metrics.totalSpend)}</p>
+              </div>
+              <div>
+                <p className="text-blue-200 text-xs uppercase tracking-wide">Contracts</p>
+                <p className="text-3xl font-bold">{contracts.length}</p>
+              </div>
+              <div>
+                <p className="text-blue-200 text-xs uppercase tracking-wide">Contract Value</p>
+                <p className="text-3xl font-bold">{fmtCurrency(metrics.contractValue)}</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Additional Metrics - Grid 2 (5 Cards) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard label="Purchased This Month" value={metrics.purchasedThisMonth} color="cyan" icon="🆕" trend="5" />
-          <StatCard label="Under Warranty" value={metrics.underWarranty} color="indigo" icon="✅" trend="3" />
-          <StatCard label="Assigned to Users" value={metrics.assignedAssets} color="pink" icon="👥" trend="6" />
-          <StatCard label="In Stock" value={metrics.inStock} color="teal" icon="📍" trend="2" />
-          <StatCard label="Needing Maintenance" value={metrics.needingMaintenance} color="red" icon="🔧" />
+        {/* ── Stat cards row 1 ── */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <StatCard label="Total Assets" value={metrics.total} color="blue" icon="📦"
+            onClick={() => navigate('/assets')} />
+          <StatCard label="IT Assets" value={metrics.it} color="purple" icon="💻"
+            sub={`${metrics.nonIt} Non-IT`} onClick={() => navigate('/assets?category=IT')} />
+          <StatCard label="Active" value={metrics.active} color="green" icon="✅"
+            sub={`${metrics.inactive} inactive`} onClick={() => navigate('/assets?status=active')} />
+          <StatCard label="Assigned" value={metrics.assigned} color="indigo" icon="👥"
+            sub={`${metrics.unassigned} unassigned`} />
+          <StatCard label="Retired" value={metrics.retired} color="red" icon="🗃️"
+            onClick={() => navigate('/assets?status=retired')} />
         </div>
 
-        {/* Charts Section - Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* Assets by Category */}
-          <ChartCard title="📊 Assets by Category">
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={assetsByCategory}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {assetsByCategory.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          {/* Assets by Department */}
-          <ChartCard title="🏢 Assets by Department">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={assetsByDepartment}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
+        {/* ── Stat cards row 2 ── */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <StatCard label="Active Contracts" value={metrics.activeContracts} color="teal" icon="📋"
+            onClick={() => navigate('/contracts')} />
+          <StatCard label="Expiring ≤ 30 days" value={metrics.expiringContracts} color="orange" icon="⚠️"
+            onClick={() => navigate('/contracts')} />
+          <StatCard label="Total Purchases" value={purchases.length} color="cyan" icon="🛒"
+            sub={`${metrics.purchasesThisMonth} this month`} onClick={() => navigate('/purchases')} />
+          <StatCard label="Pending Orders" value={purchases.filter(p => p.status === 'pending' || p.status === 'ordered').length}
+            color="pink" icon="🕐" onClick={() => navigate('/purchases')} />
         </div>
 
-        {/* Charts Section - Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ── Charts row 1 ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-          {/* Purchase Trend */}
-          <ChartCard title="📈 Purchase Trend (Last 6 Months)">
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={purchaseTrend}>
+          {/* Assets by Category pie */}
+          <Card title="Assets by Category">
+            {categoryPie.length === 0 ? <EmptyState msg="No asset data" /> : (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={categoryPie} cx="50%" cy="50%" outerRadius={75} dataKey="value"
+                    label={({ name, value }) => `${name} (${value})`} labelLine={false}>
+                    {categoryPie.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          {/* Asset health pie */}
+          <Card title="Asset Health Status">
+            {healthPie.length === 0 ? <EmptyState msg="No asset data" /> : (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={healthPie} cx="50%" cy="50%" innerRadius={50} outerRadius={75}
+                    dataKey="value" label={({ name, value }) => `${name} (${value})`} labelLine={false}>
+                    {healthPie.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          {/* Top asset sub-types bar */}
+          <Card title="Top Asset Types">
+            {subTypeBar.length === 0 ? <EmptyState msg="No asset data" /> : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={subTypeBar} layout="vertical" margin={{ left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} name="Count" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        </div>
+
+        {/* ── Purchase spend trend ── */}
+        <Card title="Purchase Spend — Last 6 Months"
+          action={<span className="text-xs text-gray-400">Amount in ₹</span>}>
+          {spendTrend.every(m => m.spend === 0) ? <EmptyState msg="No purchase data in the last 6 months" /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={spendTrend}>
+                <defs>
+                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v, n) => n === 'spend' ? [`₹${v.toLocaleString('en-IN')}`, 'Spend'] : [v, 'Orders']} />
                 <Legend />
-                <Area type="monotone" dataKey="purchases" fill="#8b5cf6" stroke="#8b5cf6" name="Units" />
+                <Area type="monotone" dataKey="spend" stroke="#3b82f6" fill="url(#spendGrad)" strokeWidth={2} name="Spend (₹)" />
+                <Area type="monotone" dataKey="orders" stroke="#a855f7" fill="none" strokeWidth={2} strokeDasharray="4 2" name="Orders" />
               </AreaChart>
             </ResponsiveContainer>
-          </ChartCard>
+          )}
+        </Card>
 
-          {/* Contract Expiry Timeline */}
-          <ChartCard title="⏰ Contract Expiry Timeline">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={contractTimeline}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="expiring" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444', r: 5 }} name="Contracts Expiring" />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartCard>
+        {/* ── Bottom section: 3 lists ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* Recently added assets */}
+          <Card title="Recently Added Assets"
+            action={<button onClick={() => navigate('/assets')} className="text-xs text-blue-600 hover:underline">View all</button>}>
+            {recentAssets.length === 0 ? <EmptyState msg="No assets yet" /> : (
+              <div className="space-y-3">
+                {recentAssets.map(a => (
+                  <div key={a.id}
+                    onClick={() => navigate(`/assets/${a.id}`)}
+                    className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xl">{a.category === 'IT' ? '💻' : '🪑'}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{a.asset_name}</p>
+                        <p className="text-xs text-gray-400">{a.asset_tag} · {a.sub_type}</p>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <StatusDot status={a.status} />
+                      <span className="text-xs text-gray-400">{fmtDate(a.created_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Recent purchases */}
+          <Card title="Recent Purchases"
+            action={<button onClick={() => navigate('/purchases')} className="text-xs text-blue-600 hover:underline">View all</button>}>
+            {recentPurchases.length === 0 ? <EmptyState msg="No purchases yet" /> : (
+              <div className="space-y-3">
+                {recentPurchases.map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{p.vendor_name}</p>
+                      <p className="text-xs text-gray-400">{p.purchase_id} · {fmtDate(p.purchase_date)}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <p className="text-sm font-semibold text-gray-800">{fmtCurrency(p.total_amount)}</p>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        p.status === 'received' ? 'bg-green-100 text-green-700' :
+                        p.status === 'ordered'  ? 'bg-blue-100 text-blue-700' :
+                        'bg-orange-100 text-orange-700'}`}>
+                        {p.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Expiring contracts */}
+          <Card title="Contracts Expiring Soon"
+            action={<button onClick={() => navigate('/contracts')} className="text-xs text-blue-600 hover:underline">View all</button>}>
+            {expiringContractsList.length === 0
+              ? <EmptyState msg="No contracts expiring within 60 days 🎉" />
+              : (
+              <div className="space-y-3">
+                {expiringContractsList.map(c => {
+                  const d = daysLeft(c.active_till);
+                  return (
+                    <div key={c.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{c.contract_name}</p>
+                        <p className="text-xs text-gray-400">{c.vendor_name}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <p className={`text-sm font-bold ${d <= 7 ? 'text-red-600' : d <= 30 ? 'text-orange-500' : 'text-yellow-600'}`}>
+                          {d <= 0 ? 'Expired' : `${d}d left`}
+                        </p>
+                        <p className="text-xs text-gray-400">{fmtDate(c.active_till)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         </div>
 
-        {/* Charts Section - Row 3 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* Asset Health Status */}
-          <ChartCard title="💚 Asset Health Status">
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={assetHealth}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {assetHealth.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          {/* Asset Distribution Stats */}
-          <ChartCard title="📍 Asset Distribution">
-            <div className="space-y-4">
-              {[
-                { label: 'In Stock', value: metrics.inStock, max: 300, color: 'bg-green-500' },
-                { label: 'Assigned', value: metrics.assignedAssets, max: 300, color: 'bg-blue-500' },
-                { label: 'Warranty', value: metrics.underWarranty, max: 300, color: 'bg-purple-500' },
-                { label: 'Maintenance', value: metrics.needingMaintenance, max: 50, color: 'bg-red-500' }
-              ].map((item, idx) => (
-                <div key={idx}>
-                  <div className="flex justify-between mb-2">
+        {/* ── Asset distribution progress bars ── */}
+        <Card title="Asset Distribution Breakdown">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[
+              { label: 'Active', value: metrics.active, total: metrics.total, color: 'bg-green-500' },
+              { label: 'Assigned to Users', value: metrics.assigned, total: metrics.total, color: 'bg-blue-500' },
+              { label: 'IT Assets', value: metrics.it, total: metrics.total, color: 'bg-purple-500' },
+              { label: 'Non-IT Assets', value: metrics.nonIt, total: metrics.total, color: 'bg-teal-500' },
+              { label: 'Inactive', value: metrics.inactive, total: metrics.total, color: 'bg-red-400' },
+              { label: 'Retired', value: metrics.retired, total: metrics.total, color: 'bg-gray-400' },
+            ].map((item, i) => {
+              const pct = item.total > 0 ? Math.round((item.value / item.total) * 100) : 0;
+              return (
+                <div key={i}>
+                  <div className="flex justify-between mb-1.5">
                     <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                    <span className="text-sm font-semibold text-gray-900">{item.value}</span>
+                    <span className="text-sm font-semibold text-gray-900">{item.value} <span className="text-gray-400 font-normal">({pct}%)</span></span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`${item.color} h-2 rounded-full transition-all`}
-                      style={{ width: `${(item.value / item.max) * 100}%` }}
-                    ></div>
+                  <div className="w-full bg-gray-100 rounded-full h-2.5">
+                    <div className={`${item.color} h-2.5 rounded-full transition-all`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
-              ))}
-            </div>
-          </ChartCard>
-        </div>
-
-        {/* Recent Activities Section */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">Recent Activity</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            {/* Recently Added Assets */}
-            <ChartCard title="✨ Recently Added Assets">
-              <div className="space-y-2">
-                {recentActivities.added.map((item) => (
-                  <ActivityItem
-                    key={item.id}
-                    type="Asset Added"
-                    title={item.title}
-                    date={item.date}
-                    icon={item.icon}
-                    color={item.color}
-                  />
-                ))}
-              </div>
-            </ChartCard>
-
-            {/* Recently Purchased Assets */}
-            <ChartCard title="🛒 Recently Purchased">
-              <div className="space-y-2">
-                {recentActivities.purchased.map((item) => (
-                  <ActivityItem
-                    key={item.id}
-                    type="Purchase"
-                    title={item.title}
-                    date={item.date}
-                    icon={item.icon}
-                    color={item.color}
-                  />
-                ))}
-              </div>
-            </ChartCard>
-
-            {/* Recently Updated Assets */}
-            <ChartCard title="📝 Recently Updated">
-              <div className="space-y-2">
-                {recentActivities.updated.map((item) => (
-                  <ActivityItem
-                    key={item.id}
-                    type="Update"
-                    title={item.title}
-                    date={item.date}
-                    icon={item.icon}
-                    color={item.color}
-                  />
-                ))}
-              </div>
-            </ChartCard>
+              );
+            })}
           </div>
-        </div>
+        </Card>
 
-        {/* Summary Stats */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-8 rounded-lg shadow-lg">
-          <h3 className="text-2xl font-bold mb-4">📊 Asset Inventory Summary</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-blue-100 text-sm">Total Asset Value</p>
-              <p className="text-3xl font-bold">₹0</p>
-            </div>
-            <div>
-              <p className="text-blue-100 text-sm">Avg Asset Age</p>
-              <p className="text-3xl font-bold">0Y</p>
-            </div>
-            <div>
-              <p className="text-blue-100 text-sm">Utilization Rate</p>
-              <p className="text-3xl font-bold">0%</p>
-            </div>
-            <div>
-              <p className="text-blue-100 text-sm">Renewal Rate</p>
-              <p className="text-3xl font-bold">0%</p>
-            </div>
-          </div>
-        </div>
       </div>
     </AppLayout>
   );

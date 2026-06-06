@@ -13,7 +13,7 @@ const StatusBadge = ({ status }) => {
     expired: 'bg-red-100 text-red-800',
     renewal_due: 'bg-yellow-100 text-yellow-800'
   };
-  return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${styles[status] || styles.active}`}>{status.replace('_', ' ')}</span>;
+  return <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${styles[status] || styles.active}`}>{status.replace('_', ' ')}</span>;
 };
 
 // Contract Card
@@ -373,7 +373,7 @@ export const Contracts = () => {
                         <td className="px-6 py-4 font-medium text-gray-900">₹{(parseFloat(contract.contract_value) || 0).toLocaleString()}</td>
                         <td className="px-6 py-4 text-gray-700">{new Date(contract.active_from).toLocaleDateString('en-IN')}</td>
                         <td className="px-6 py-4 text-gray-700">{new Date(contract.active_till).toLocaleDateString('en-IN')}</td>
-                        <td className="px-6 py-4"><StatusBadge status={contract.status} /></td>
+                        <td className="px-6 py-4 align-middle"><StatusBadge status={contract.status} /></td>
                         <td className="px-6 py-4">
                           <div className="flex gap-3">
                             <button onClick={() => handleViewContract(contract.id)} className="text-blue-600 hover:text-blue-800 font-medium text-xs">View</button>
