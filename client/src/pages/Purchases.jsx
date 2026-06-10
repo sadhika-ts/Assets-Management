@@ -73,30 +73,20 @@ const StatusDropdown = ({ purchase, onStatusChange, updating }) => {
 
 // Vendor Card
 const VendorCard = ({ vendor, onView }) => (
-  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all">
+  <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-6 hover:shadow-md transition-all">
     <div className="flex justify-between items-start mb-4">
       <div>
-        <h3 className="font-bold text-gray-800">{vendor.name}</h3>
-        <p className="text-sm text-gray-600">ID: {vendor.id}</p>
+        <h3 className="font-bold text-gray-800 dark:text-slate-100">{vendor.name}</h3>
       </div>
-      <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-semibold">
+      <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-full text-xs font-semibold">
         {vendor.totalPurchases} Orders
       </span>
     </div>
-
-    <div className="space-y-2 text-sm text-gray-700 mb-4 border-b border-gray-200 pb-4">
+    <div className="space-y-2 text-sm text-gray-600 dark:text-slate-300 mb-4 border-b border-gray-200 dark:border-slate-700 pb-4">
       <p><strong>Contact:</strong> {vendor.contact}</p>
       <p><strong>Email:</strong> {vendor.email}</p>
       <p><strong>Total Spent:</strong> ₹{vendor.totalSpent.toLocaleString()}</p>
-      <p><strong>Rating:</strong> ⭐ {vendor.rating}/5</p>
     </div>
-
-    <button
-      onClick={() => onView(vendor.id)}
-      className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition text-sm font-medium"
-    >
-      View Details
-    </button>
   </div>
 );
 
@@ -150,47 +140,26 @@ export const Purchases = () => {
   const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
-    const shouldRefresh = searchParams.get('refresh') === 'true';
-    const newPurchaseId = searchParams.get('new');
-
-    if (shouldRefresh) {
-      console.log('🔄 Refreshing purchases list...');
-      if (newPurchaseId) {
-        console.log('New purchase ID:', newPurchaseId);
-      }
-    }
-
     fetchPurchases();
   }, [searchParams]);
 
   const fetchPurchases = async () => {
     try {
-      console.log('📥 Fetching all purchases from API...');
-      // Fetch with high limit to get all purchases (up to 500)
       const response = await api.get('/purchases?limit=500');
       const purchases = response.data?.data?.purchases || response.data || [];
-
-      console.log('✅ Fetched purchases:', purchases.length);
       setMockPurchases(purchases);
 
-      // Extract unique vendors from purchases - exclude test vendors
       const uniqueVendors = [];
       const vendorMap = new Map();
 
-      // List of test vendor keywords to exclude
-      const testKeywords = ['test', 'demo', 'sample', 'validation', 'zero', 'decimal', 'dashboard', 'autogen', 'large'];
-
       purchases.forEach(purchase => {
-        // Skip test vendors
-        const vendorNameLower = purchase.vendor_name.toLowerCase();
-        const isTestVendor = testKeywords.some(keyword => vendorNameLower.includes(keyword));
+        const vendorName = (purchase.vendor_name || '').trim();
+        if (!vendorName) return;
 
-        if (isTestVendor) return; // Skip this vendor
-
-        if (!vendorMap.has(purchase.vendor_name)) {
-          vendorMap.set(purchase.vendor_name, {
-            id: purchase.vendor_name,
-            name: purchase.vendor_name,
+        if (!vendorMap.has(vendorName)) {
+          vendorMap.set(vendorName, {
+            id: vendorName,
+            name: vendorName,
             contact: purchase.vendor_contact || 'N/A',
             email: purchase.vendor_email || 'N/A',
             address: purchase.vendor_address || 'N/A',
@@ -198,7 +167,7 @@ export const Purchases = () => {
             totalSpent: purchase.status !== 'cancelled' ? (parseFloat(purchase.total_amount) || 0) : 0
           });
         } else {
-          const vendor = vendorMap.get(purchase.vendor_name);
+          const vendor = vendorMap.get(vendorName);
           vendor.totalPurchases += 1;
           if (purchase.status !== 'cancelled') vendor.totalSpent += parseFloat(purchase.total_amount) || 0;
         }
@@ -206,15 +175,13 @@ export const Purchases = () => {
 
       vendorMap.forEach(vendor => uniqueVendors.push(vendor));
       setMockVendors(uniqueVendors);
-      setLoading(false);
 
-      // Show success toast if this is a refresh after creating new purchase
-      const shouldRefresh = searchParams.get('refresh') === 'true';
-      if (shouldRefresh) {
-        toast.success('✅ Purchases list updated with new order!');
+      if (searchParams.get('refresh') === 'true') {
+        toast.success('Purchases list updated!');
       }
     } catch (error) {
-      console.error('Error fetching purchases:', error);
+      toast.error('Failed to load purchases');
+    } finally {
       setLoading(false);
     }
   };
@@ -274,8 +241,9 @@ export const Purchases = () => {
   })();
 
   const filteredPurchases = mockPurchases.filter(purchase => {
-    const matchesSearch = purchase.purchase_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         purchase.vendor_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = (purchase.purchase_id || '').toLowerCase().includes(term) ||
+                          (purchase.vendor_name  || '').toLowerCase().includes(term);
     const matchesStatus = filterStatus === 'all' || purchase.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -396,17 +364,17 @@ export const Purchases = () => {
             </div>
 
             {/* All Purchases */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-gray-100">
-                <h3 className="text-base font-semibold text-gray-800">All Purchases <span className="text-gray-400 font-normal text-sm">({filteredPurchases.length})</span></h3>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-gray-100 dark:border-slate-700">
+                <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100">All Purchases <span className="text-gray-400 font-normal text-sm">({filteredPurchases.length})</span></h3>
                 <div className="flex gap-2 flex-wrap">
                   <div className="relative">
                     <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     <input type="text" placeholder="Search PO or vendor…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                      className="pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 w-44" />
+                      className="pl-8 pr-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 w-44" />
                   </div>
                   <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50">
+                    className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-100">
                     <option value="all">All Status</option>
                     {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
                   </select>
@@ -414,25 +382,25 @@ export const Purchases = () => {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
+                  <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
                     <tr>
                       {['PO ID','Vendor','Date','Amount','Status'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 dark:divide-slate-700">
                     {filteredPurchases.length === 0
-                      ? <tr><td colSpan={5} className="px-4 py-16 text-center text-gray-400">No purchases found</td></tr>
+                      ? <tr><td colSpan={5} className="px-4 py-16 text-center text-gray-400 dark:text-slate-500">No purchases found</td></tr>
                       : filteredPurchases.map(p => {
                           const amt = parseFloat(p.total_amount) || 0;
                           const fmt = amt >= 100000 ? (amt/100000).toFixed(2)+'L' : amt.toLocaleString();
                           return (
-                            <tr key={p.id} className="hover:bg-blue-50/20 transition-colors">
-                              <td className="px-4 py-3 font-mono font-semibold text-blue-600">{p.purchase_id}</td>
-                              <td className="px-4 py-3 font-medium text-gray-800">{p.vendor_name}</td>
-                              <td className="px-4 py-3 text-gray-500">{new Date(p.purchase_date).toLocaleDateString('en-IN')}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-900">₹{fmt}</td>
+                            <tr key={p.id} className="hover:bg-blue-50/20 dark:hover:bg-slate-700/40 transition-colors">
+                              <td className="px-4 py-3 font-mono font-semibold text-blue-600 dark:text-blue-400">{p.purchase_id}</td>
+                              <td className="px-4 py-3 font-medium text-gray-800 dark:text-slate-200">{p.vendor_name}</td>
+                              <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{new Date(p.purchase_date).toLocaleDateString('en-IN')}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">₹{fmt}</td>
                               <td className="px-4 py-3">
                                 <StatusDropdown purchase={p} onStatusChange={handleStatusChange} updating={updatingId === p.id} />
                               </td>
@@ -451,28 +419,30 @@ export const Purchases = () => {
 
         {/* VENDORS TAB */}
         {activeTab === 'vendors' && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-4 border-b border-gray-100">
-              <h3 className="text-base font-semibold text-gray-800">Vendors <span className="text-gray-400 font-normal text-sm">({mockVendors.length})</span></h3>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="px-4 py-4 border-b border-gray-100 dark:border-slate-700">
+              <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100">Vendors <span className="text-gray-400 font-normal text-sm">({mockVendors.length})</span></h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
                   <tr>
                     {['Vendor Name','Contact','Email','Address','Orders','Total Spent'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {mockVendors.map(v => (
-                    <tr key={v.id} className="hover:bg-blue-50/20 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-gray-800">{v.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{v.contact}</td>
-                      <td className="px-4 py-3 text-gray-600">{v.email}</td>
-                      <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{v.address}</td>
-                      <td className="px-4 py-3 text-gray-600">{v.totalPurchases}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-900">₹{v.totalSpent>=100000?(v.totalSpent/100000).toFixed(2)+'L':v.totalSpent.toLocaleString()}</td>
+                <tbody className="divide-y divide-gray-50 dark:divide-slate-700">
+                  {mockVendors.length === 0
+                    ? <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400 dark:text-slate-500">No vendors found</td></tr>
+                    : mockVendors.map(v => (
+                    <tr key={v.id} className="hover:bg-blue-50/20 dark:hover:bg-slate-700/40 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-gray-800 dark:text-slate-200">{v.name}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{v.contact}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{v.email}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-slate-400 max-w-[200px] truncate">{v.address}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{v.totalPurchases}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">₹{v.totalSpent>=100000?(v.totalSpent/100000).toFixed(2)+'L':v.totalSpent.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -485,8 +455,8 @@ export const Purchases = () => {
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             {/* Purchase Trend */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Purchase Trend (Last 6 Months)</h3>
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm p-6">
+              <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100 mb-4">Purchase Trend</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={purchaseTrendData}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -501,8 +471,8 @@ export const Purchases = () => {
 
             {/* Category Distribution & Vendor Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Status Distribution</h3>
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm p-6">
+                <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100 mb-4">Status Distribution</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -524,8 +494,8 @@ export const Purchases = () => {
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">⭐ Vendor Performance</h3>
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm p-6">
+                <h3 className="text-base font-semibold text-gray-800 dark:text-slate-100 mb-4">Vendor Performance</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={vendorPerformanceData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -575,14 +545,14 @@ export const Purchases = () => {
         {/* Delete modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </div>
-              <h2 className="text-lg font-bold text-gray-900 text-center mb-1">Delete Purchase Order</h2>
-              <p className="text-gray-500 text-sm text-center mb-6">Are you sure you want to delete <span className="font-semibold text-gray-800">{deleteTarget?.poId}</span>? This cannot be undone.</p>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 text-center mb-1">Delete Purchase Order</h2>
+              <p className="text-gray-500 dark:text-slate-400 text-sm text-center mb-6">Are you sure you want to delete <span className="font-semibold text-gray-800 dark:text-slate-200">{deleteTarget?.poId}</span>? This cannot be undone.</p>
               <div className="flex gap-3">
-                <button onClick={() => setShowDeleteModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium text-sm transition-colors">Cancel</button>
+                <button onClick={() => setShowDeleteModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-600 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 font-medium text-sm transition-colors">Cancel</button>
                 <button onClick={confirmDelete} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium text-sm transition-colors">Delete</button>
               </div>
             </div>

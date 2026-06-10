@@ -89,7 +89,6 @@ const generateAssetTagFromAPI = async (category, subType) => {
     });
 
     const generatedTag = response.data.data?.asset_tag;
-    console.log('✓ Generated asset tag from backend:', generatedTag);
     return generatedTag || '';
   } catch (err) {
     console.error('Error generating asset tag:', err);
@@ -224,7 +223,6 @@ export const AssetForm = () => {
       const newTag = await generateAssetTagFromAPI(selectedCategory, selectedSubType);
       if (newTag) {
         setValue('asset_tag', newTag);
-        console.log('Asset tag set to:', newTag);
       }
     };
 
@@ -236,7 +234,6 @@ export const AssetForm = () => {
   // Clear assigned_to when status changes to inactive or disposed
   useEffect(() => {
     if (selectedStatus !== 'active') {
-      console.log('Status changed to', selectedStatus, '- clearing assigned_to');
       setValue('assigned_to', '');
     }
   }, [selectedStatus, setValue]);
@@ -245,7 +242,6 @@ export const AssetForm = () => {
   const onSubmit = async (data) => {
     try {
       setIsSaving(true);
-      console.log('Form submitted with data:', data);
 
       // Validation: Check if subtype is "Other" and description is empty
       if (data.sub_type === 'Other' && !data.other_subtype_description.trim()) {
@@ -317,12 +313,9 @@ export const AssetForm = () => {
         others: data.others || undefined
       };
 
-      console.log('Sending payload:', payload);
 
       if (isEditMode) {
-        console.log(`Updating asset ${id}`);
         const response = await api.put(`/assets/${id}`, payload);
-        console.log('Update response:', response.data);
 
         setToast({
           message: '✅ Asset updated successfully',
@@ -333,12 +326,9 @@ export const AssetForm = () => {
           navigate('/assets');
         }, 1500);
       } else {
-        console.log('Creating new asset');
         const response = await api.post('/assets', payload);
-        console.log('Create response:', response.data);
 
         const assetId = response.data.data?.id || response.data.data?.asset?.id;
-        console.log('New asset ID:', assetId);
 
         // Show success message BEFORE redirecting
         setToast({
@@ -349,7 +339,6 @@ export const AssetForm = () => {
         // Give user time to see the success message before redirecting
         setTimeout(() => {
           const assetTag = payload.asset_tag;
-          console.log('Redirecting to assets list with refresh:', assetId, assetTag);
           // Navigate to assets list with refresh flag to show new asset
           navigate(`/assets?refresh=true&new=${assetTag}`);
         }, 2000);
