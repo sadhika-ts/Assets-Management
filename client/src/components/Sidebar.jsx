@@ -37,62 +37,88 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   return (
     <>
       {mobileOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={onMobileClose} />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden" onClick={onMobileClose} />
       )}
       <aside className={`
         fixed left-0 top-0 h-screen z-40 flex flex-col
         bg-gradient-to-b from-slate-900 via-slate-900 to-slate-800
-        border-r border-slate-700/40 shadow-xl
+        border-r border-slate-700/40 shadow-2xl
         transition-all duration-300 ease-in-out
         ${collapsed ? 'w-[72px]' : 'w-64'}
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
+
         {/* Brand */}
         <div className={`flex items-center gap-3 h-16 px-4 border-b border-slate-700/40 flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/25">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/30">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
             </svg>
           </div>
           {!collapsed && (
-            <div>
-              <p className="text-white font-bold text-sm leading-tight">Asset Manager</p>
-              <p className="text-slate-400 text-xs">IT Inventory System</p>
+            <div className="min-w-0">
+              <p className="text-white font-bold text-sm leading-tight tracking-wide">Asset Manager</p>
+              <p className="text-slate-500 text-[11px] mt-0.5">IT Inventory System</p>
             </div>
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-2 py-5 space-y-1 overflow-y-auto scrollbar-none">
+          {!collapsed && (
+            <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest px-3 mb-2">Navigation</p>
+          )}
           {NAV.map(item => {
             const active = isActive(item.path);
             return (
               <Link key={item.path} to={item.path} onClick={onMobileClose}
                 title={collapsed ? item.label : ''}
                 className={`
-                  relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group
+                  relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 group
                   ${collapsed ? 'justify-center' : ''}
-                  ${active ? 'bg-blue-500/15 text-blue-400' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'}
+                  ${active
+                    ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                    : 'text-slate-400 hover:bg-slate-700/60 hover:text-white'}
                 `}>
-                {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-400 rounded-r-full" />}
-                <span className={`flex-shrink-0 ${active ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                {active && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-400 rounded-r-full shadow-sm shadow-blue-400/50" />
+                )}
+                <span className={`flex-shrink-0 transition-colors ${active ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-200'}`}>
                   {item.icon}
                 </span>
-                {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+                {!collapsed && (
+                  <span className={`text-sm font-medium transition-colors ${active ? 'text-blue-300' : 'group-hover:text-white'}`}>
+                    {item.label}
+                  </span>
+                )}
+                {active && !collapsed && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400" />
+                )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Collapse toggle — desktop */}
-        <div className="hidden lg:flex border-t border-slate-700/40 p-3 justify-end">
-          <button onClick={() => setCollapsed(c => !c)}
-            className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700/60 transition-colors"
-            title={collapsed ? 'Expand' : 'Collapse'}>
-            <svg className={`w-4 h-4 transition-transform ${collapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          </button>
+        {/* Footer */}
+        <div className="border-t border-slate-700/40 p-3">
+          {!collapsed && (
+            <div className="flex items-center gap-2.5 px-2 py-2 mb-2 rounded-xl bg-slate-800/60">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-300 leading-tight">Admin</p>
+                <p className="text-[10px] text-slate-500 truncate">IT Department</p>
+              </div>
+            </div>
+          )}
+          <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'}`}>
+            <button onClick={() => setCollapsed(c => !c)}
+              className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700/60 transition-colors"
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              <svg className={`w-4 h-4 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
     </>
