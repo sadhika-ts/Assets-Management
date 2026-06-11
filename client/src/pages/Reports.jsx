@@ -10,19 +10,19 @@ const daysLeft = till => Math.ceil((new Date(till) - new Date()) / 86400000);
 
 const statusBadge = (status) => {
   const map = {
-    active:        'bg-green-100 text-green-700',
-    inactive:      'bg-red-100 text-red-700',
-    retired:       'bg-gray-100 text-gray-600',
-    received:      'bg-green-100 text-green-700',
-    ordered:       'bg-blue-100 text-blue-700',
-    pending:       'bg-orange-100 text-orange-700',
-    cancelled:     'bg-red-100 text-red-700',
-    expiring_soon: 'bg-orange-100 text-orange-700',
-    expired:       'bg-red-100 text-red-700',
-    upcoming:      'bg-blue-100 text-blue-700',
+    active:        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    inactive:      'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    retired:       'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-400',
+    received:      'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    ordered:       'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    pending:       'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    cancelled:     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    expiring_soon: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    expired:       'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    upcoming:      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${map[status] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${map[status] || 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-400'}`}>
       {status?.replace('_', ' ')}
     </span>
   );
@@ -42,12 +42,25 @@ const download = (content, filename, mime) => {
   URL.revokeObjectURL(a.href);
 };
 
+// ── SVG icon paths per report ────────────────────────────────────
+const REPORT_ICONS = {
+  all_assets:          'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+  it_assets:           'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+  non_it_assets:       'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+  assigned_assets:     'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
+  unassigned_assets:   'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
+  retired_assets:      'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
+  all_purchases:       'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
+  vendor_spend:        'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+  all_contracts:       'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  expiring_contracts:  'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z',
+};
+
 // ── Report definitions ───────────────────────────────────────────
 const REPORTS = [
   {
     id: 'all_assets',
     title: 'All Assets',
-    icon: '📦',
     color: 'blue',
     description: 'Complete list of all assets with status, category and assignment details.',
     filters: ['dateFrom', 'dateTo', 'category', 'status'],
@@ -55,7 +68,6 @@ const REPORTS = [
   {
     id: 'it_assets',
     title: 'IT Assets',
-    icon: '💻',
     color: 'purple',
     description: 'All IT assets — laptops, desktops, routers, switches and more.',
     filters: ['status'],
@@ -63,7 +75,6 @@ const REPORTS = [
   {
     id: 'non_it_assets',
     title: 'Non-IT Assets',
-    icon: '🪑',
     color: 'teal',
     description: 'Furniture and non-IT equipment tracked in inventory.',
     filters: ['status'],
@@ -71,7 +82,6 @@ const REPORTS = [
   {
     id: 'assigned_assets',
     title: 'Assigned Assets',
-    icon: '👥',
     color: 'indigo',
     description: 'Assets currently assigned to employees.',
     filters: ['category'],
@@ -79,7 +89,6 @@ const REPORTS = [
   {
     id: 'unassigned_assets',
     title: 'Unassigned Assets',
-    icon: '📍',
     color: 'orange',
     description: 'Assets that are active but not yet assigned to any employee.',
     filters: ['category'],
@@ -87,7 +96,6 @@ const REPORTS = [
   {
     id: 'retired_assets',
     title: 'Retired / Inactive Assets',
-    icon: '🗃️',
     color: 'red',
     description: 'Assets that are retired or inactive and no longer in use.',
     filters: [],
@@ -95,7 +103,6 @@ const REPORTS = [
   {
     id: 'all_purchases',
     title: 'All Purchase Orders',
-    icon: '🛒',
     color: 'cyan',
     description: 'Full list of purchase orders with vendor, date and amount.',
     filters: ['dateFrom', 'dateTo', 'purchaseStatus'],
@@ -103,7 +110,6 @@ const REPORTS = [
   {
     id: 'vendor_spend',
     title: 'Vendor-wise Spend',
-    icon: '🏢',
     color: 'pink',
     description: 'Total spend per vendor across all purchase orders.',
     filters: ['dateFrom', 'dateTo'],
@@ -111,7 +117,6 @@ const REPORTS = [
   {
     id: 'all_contracts',
     title: 'All Contracts',
-    icon: '📋',
     color: 'green',
     description: 'All contracts with vendor, validity period and value.',
     filters: ['contractStatus'],
@@ -119,23 +124,22 @@ const REPORTS = [
   {
     id: 'expiring_contracts',
     title: 'Expiring Contracts',
-    icon: '⚠️',
     color: 'orange',
     description: 'Contracts expiring within the next 60 days.',
     filters: [],
   },
 ];
 
-const COLOR_BORDER = {
-  blue: 'border-blue-500 text-blue-700 bg-blue-50',
-  purple: 'border-purple-500 text-purple-700 bg-purple-50',
-  teal: 'border-teal-500 text-teal-700 bg-teal-50',
-  indigo: 'border-indigo-500 text-indigo-700 bg-indigo-50',
-  orange: 'border-orange-500 text-orange-700 bg-orange-50',
-  red: 'border-red-500 text-red-700 bg-red-50',
-  cyan: 'border-cyan-500 text-cyan-700 bg-cyan-50',
-  pink: 'border-pink-500 text-pink-700 bg-pink-50',
-  green: 'border-green-500 text-green-700 bg-green-50',
+const COLOR_MAP = {
+  blue:   { icon: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',   hover: 'group-hover:text-blue-600 dark:group-hover:text-blue-400'   },
+  purple: { icon: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400', badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', hover: 'group-hover:text-purple-600 dark:group-hover:text-purple-400' },
+  teal:   { icon: 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400',   badge: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',   hover: 'group-hover:text-teal-600 dark:group-hover:text-teal-400'   },
+  indigo: { icon: 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400', badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400', hover: 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400' },
+  orange: { icon: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', hover: 'group-hover:text-orange-600 dark:group-hover:text-orange-400' },
+  red:    { icon: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',       badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',       hover: 'group-hover:text-red-600 dark:group-hover:text-red-400'     },
+  cyan:   { icon: 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400',   badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',   hover: 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400'   },
+  pink:   { icon: 'bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400',   badge: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',   hover: 'group-hover:text-pink-600 dark:group-hover:text-pink-400'   },
+  green:  { icon: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400', badge: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', hover: 'group-hover:text-green-600 dark:group-hover:text-green-400' },
 };
 
 // ── Main component ───────────────────────────────────────────────
@@ -371,9 +375,9 @@ export const Reports = () => {
   if (loading) {
     return (
       <AppLayout title="Reports">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-          <span className="ml-3 text-gray-500">Loading data…</span>
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent" />
+          <p className="text-sm text-gray-400 dark:text-slate-500">Loading report data…</p>
         </div>
       </AppLayout>
     );
@@ -385,58 +389,74 @@ export const Reports = () => {
     const hasFilters = report.filters.length > 0;
     const headers = previewRows.length > 0 ? Object.keys(previewRows[0]) : [];
 
+    const c = COLOR_MAP[report.color] || COLOR_MAP.blue;
     return (
       <AppLayout title="Reports">
         <div className="space-y-5">
 
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={handleBack}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                ← Back
-              </button>
-              <div>
-                <h2 className="text-xl font-bold text-gray-800">{report.icon} {report.title}</h2>
-                <p className="text-sm text-gray-500">{report.description}</p>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <button onClick={handleBack}
+                  className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-slate-400 transition-colors">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                  </svg>
+                </button>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d={REPORT_ICONS[report.id]} />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800 dark:text-slate-100">{report.title}</h2>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">{report.description}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => handleExport('csv')}
-                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition-colors">
-                ↓ CSV
-              </button>
-              <button onClick={() => handleExport('json')}
-                className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium transition-colors">
-                ↓ JSON
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => handleExport('csv')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm shadow-emerald-500/20">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  CSV
+                </button>
+                <button onClick={() => handleExport('json')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm shadow-purple-500/20">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  JSON
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Filters */}
           {hasFilters && (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Filter Report</p>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-3">Filter Report</p>
               <div className="flex flex-wrap gap-4">
                 {report.filters.includes('dateFrom') && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">From Date</label>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">From Date</label>
                     <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-200" />
                   </div>
                 )}
                 {report.filters.includes('dateTo') && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">To Date</label>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">To Date</label>
                     <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-200" />
                   </div>
                 )}
                 {report.filters.includes('category') && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Category</label>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Category</label>
                     <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-200">
                       <option value="all">All</option>
                       <option value="IT">IT</option>
                       <option value="Non-IT">Non-IT</option>
@@ -445,9 +465,9 @@ export const Reports = () => {
                 )}
                 {report.filters.includes('status') && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Status</label>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Status</label>
                     <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-200">
                       <option value="all">All</option>
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
@@ -457,9 +477,9 @@ export const Reports = () => {
                 )}
                 {report.filters.includes('purchaseStatus') && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Status</label>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Status</label>
                     <select value={filterPurchaseStatus} onChange={e => setFilterPurchaseStatus(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-200">
                       <option value="all">All</option>
                       <option value="pending">Pending</option>
                       <option value="ordered">Ordered</option>
@@ -470,9 +490,9 @@ export const Reports = () => {
                 )}
                 {report.filters.includes('contractStatus') && (
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Status</label>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Status</label>
                     <select value={filterContractStatus} onChange={e => setFilterContractStatus(e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-200">
                       <option value="all">All</option>
                       <option value="active">Active</option>
                       <option value="expiring_soon">Expiring Soon</option>
@@ -485,39 +505,43 @@ export const Reports = () => {
           )}
 
           {/* Summary bar */}
-          <div className="flex items-center justify-between bg-gray-50 rounded-xl px-5 py-3 border border-gray-100">
-            <span className="text-sm text-gray-600">
-              <span className="font-semibold text-gray-800">{previewRows.length}</span> records found
+          <div className="flex items-center justify-between bg-gray-50 dark:bg-slate-800/60 rounded-2xl px-5 py-3 border border-gray-100 dark:border-slate-700">
+            <span className="text-sm text-gray-600 dark:text-slate-400">
+              <span className="font-semibold text-gray-800 dark:text-slate-200">{previewRows.length}</span> records found
             </span>
             {previewRows.length > 0 && (
-              <span className="text-xs text-gray-400">{headers.length} columns</span>
+              <span className="text-xs text-gray-400 dark:text-slate-500">{headers.length} columns</span>
             )}
           </div>
 
           {/* Table preview */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden">
             {previewRows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                <span className="text-4xl mb-3">📭</span>
-                <p className="text-sm">No records match the selected filters</p>
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-slate-700 flex items-center justify-center">
+                  <svg className="w-7 h-7 text-gray-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                </div>
+                <p className="text-gray-500 dark:text-slate-400 font-medium">No records match the selected filters</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
+                  <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide w-8">#</th>
                       {headers.map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 dark:divide-slate-700">
                     {previewRows.map((row, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
+                      <tr key={i} className="hover:bg-blue-50/30 dark:hover:bg-slate-700/40 transition-colors">
+                        <td className="px-4 py-3 text-gray-300 dark:text-slate-600 text-xs">{i + 1}</td>
                         {headers.map(h => (
-                          <td key={h} className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                          <td key={h} className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
                             {h === 'Status' ? statusBadge(row[h]) : row[h]}
                           </td>
                         ))}
@@ -555,51 +579,66 @@ export const Reports = () => {
     })(),
   };
 
-  const ReportCard = ({ report }) => (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
-      onClick={() => handleGenerate(report)}>
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-3xl">{report.icon}</span>
-        <span className={`text-lg font-bold px-2.5 py-0.5 rounded-lg border ${COLOR_BORDER[report.color]}`}>
-          {counts[report.id] ?? 0}
-        </span>
+  const ReportCard = ({ report }) => {
+    const c = COLOR_MAP[report.color] || COLOR_MAP.blue;
+    return (
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer group"
+        onClick={() => handleGenerate(report)}>
+        <div className="flex items-start justify-between mb-4">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.icon} group-hover:scale-110 transition-transform duration-200`}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d={REPORT_ICONS[report.id]} />
+            </svg>
+          </div>
+          <span className={`text-lg font-bold px-3 py-0.5 rounded-xl ${c.badge}`}>
+            {counts[report.id] ?? 0}
+          </span>
+        </div>
+        <h3 className={`font-semibold text-gray-800 dark:text-slate-100 mb-1 transition-colors ${c.hover}`}>{report.title}</h3>
+        <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">{report.description}</p>
+        <div className="mt-4 flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+          Generate Report
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
       </div>
-      <h3 className="font-semibold text-gray-800 mb-1 group-hover:text-blue-600 transition-colors">{report.title}</h3>
-      <p className="text-xs text-gray-500 leading-relaxed">{report.description}</p>
-      <div className="mt-4 flex items-center gap-1 text-xs text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-        Generate Report →
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <AppLayout title="Reports">
       <div className="space-y-8">
 
         {/* Page header */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">Reports</h2>
-          <p className="text-sm text-gray-500 mt-1">Select a report to preview and export data as CSV or JSON.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Reports</h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">Select a report to preview and export data as CSV or JSON.</p>
+          </div>
         </div>
 
         {/* Quick summary strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Assets', value: assets.length, color: 'bg-blue-600' },
-            { label: 'Total Purchases', value: purchases.length, color: 'bg-purple-600' },
-            { label: 'Total Contracts', value: contracts.length, color: 'bg-teal-600' },
-            { label: 'Expiring Soon', value: counts.expiring_contracts, color: 'bg-orange-500' },
+            { label: 'Total Assets',    value: assets.length,                from: 'from-blue-500',   to: 'to-blue-600'   },
+            { label: 'Total Purchases', value: purchases.length,             from: 'from-purple-500', to: 'to-purple-600' },
+            { label: 'Total Contracts', value: contracts.length,             from: 'from-teal-500',   to: 'to-teal-600'   },
+            { label: 'Expiring Soon',   value: counts.expiring_contracts,    from: 'from-orange-500', to: 'to-orange-600' },
           ].map((s, i) => (
-            <div key={i} className={`${s.color} text-white rounded-xl p-4 shadow-sm`}>
-              <p className="text-white/75 text-xs font-medium uppercase tracking-wide">{s.label}</p>
-              <p className="text-3xl font-bold mt-1">{s.value}</p>
+            <div key={i} className={`bg-gradient-to-br ${s.from} ${s.to} text-white rounded-2xl p-5 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200`}>
+              <p className="text-white/70 text-xs font-medium uppercase tracking-wide">{s.label}</p>
+              <p className="text-3xl font-bold mt-1.5">{s.value}</p>
             </div>
           ))}
         </div>
 
         {/* Asset reports */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Asset Reports</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 bg-blue-500 rounded-full" />
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Asset Reports</h3>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {assetReports.map(r => <ReportCard key={r.id} report={r} />)}
           </div>
@@ -607,7 +646,10 @@ export const Reports = () => {
 
         {/* Purchase reports */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Purchase Reports</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 bg-purple-500 rounded-full" />
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Purchase Reports</h3>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {purchaseReports.map(r => <ReportCard key={r.id} report={r} />)}
           </div>
@@ -615,7 +657,10 @@ export const Reports = () => {
 
         {/* Contract reports */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Contract Reports</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 bg-teal-500 rounded-full" />
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Contract Reports</h3>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {contractReports.map(r => <ReportCard key={r.id} report={r} />)}
           </div>
