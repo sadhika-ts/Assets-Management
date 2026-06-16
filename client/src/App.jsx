@@ -10,6 +10,7 @@ import { PurchaseForm } from './pages/PurchaseForm';
 import { Contracts } from './pages/Contracts';
 import { ContractForm } from './pages/ContractForm';
 import { Reports } from './pages/Reports';
+import { Warranty } from './pages/Warranty';
 import { NotFound } from './pages/NotFound';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
         <Route path="/contracts/new" element={<ContractForm />} />
         <Route path="/contracts/:id/edit" element={<ContractForm />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/warranty" element={<Warranty />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

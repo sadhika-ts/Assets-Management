@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
+import { AttachmentSection } from '../components/AttachmentSection';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useVendors } from '../hooks/useVendors';
@@ -87,6 +88,13 @@ export const PurchaseForm = () => {
       };
       const response = await api.post('/purchases', payload);
       const purchaseId = response.data?.data?.purchase?.purchase_id || generatedPurchaseId;
+      setGeneratedPurchaseId(purchaseId);
+      // Move pending attachments to the real PO key
+      const pending = localStorage.getItem('purchase_attachments_pending');
+      if (pending && purchaseId) {
+        localStorage.setItem(`purchase_attachments_${purchaseId}`, pending);
+        localStorage.removeItem('purchase_attachments_pending');
+      }
       toast.success(`Purchase Order ${purchaseId} created`);
       setTimeout(() => navigate(`/purchases?refresh=true&new=${purchaseId}`), 1500);
     } catch (err) {
@@ -222,6 +230,16 @@ export const PurchaseForm = () => {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Section 4: Document Attachments */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-slate-700">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+              <span className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">4</span>
+              Document Attachments
+              <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">(optional)</span>
+            </h3>
+            <AttachmentSection storageKey={generatedPurchaseId ? `purchase_attachments_${generatedPurchaseId}` : 'purchase_attachments_pending'} />
           </div>
 
           {/* Actions */}

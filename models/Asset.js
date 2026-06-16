@@ -67,6 +67,8 @@ module.exports = (sequelize) => {
     Asset.belongsTo(models.Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
     Asset.hasOne(models.AssetDetail, { foreignKey: 'asset_id', as: 'detail' });
     Asset.hasMany(models.AuditLog, { foreignKey: 'asset_id', as: 'auditLogs' });
+    Asset.hasMany(models.SoftwareLicense, { foreignKey: 'asset_id', as: 'licenses' });
+    Asset.hasMany(models.Warranty, { foreignKey: 'asset_id', as: 'warranties' });
   };
 
   return Asset;

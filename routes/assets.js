@@ -279,6 +279,10 @@ router.get('/:id', /* verifyToken, */ async (req, res) => {  // DISABLED FOR DEV
           include: [{ association: 'user', attributes: ['name', 'email'] }],
           order: [['changed_at', 'DESC']],
           limit: 10
+        },
+        {
+          association: 'licenses',
+          attributes: ['id', 'license_key', 'license_vendor', 'license_expiry', 'created_at']
         }
       ]
     });
@@ -862,5 +866,66 @@ router.patch(
     }
   }
 );
+
+// ── Software Licenses ────────────────────────────────────────────
+
+// GET /api/assets/:id/licenses
+router.get('/:id/licenses', async (req, res) => {
+  try {
+    const asset = await models.Asset.findByPk(req.params.id);
+    if (!asset) return res.status(404).json({ success: false, message: 'Asset not found' });
+    const licenses = await models.SoftwareLicense.findAll({
+      where: { asset_id: req.params.id },
+      order: [['created_at', 'ASC']]
+    });
+    res.json({ success: true, data: { licenses } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/assets/:id/licenses — replace all licenses for this asset
+router.post('/:id/licenses', async (req, res) => {
+  const transaction = await models.sequelize.transaction();
+  try {
+    const asset = await models.Asset.findByPk(req.params.id, { transaction });
+    if (!asset) { await transaction.rollback(); return res.status(404).json({ success: false, message: 'Asset not found' }); }
+
+    const { licenses } = req.body; // array of { license_key, license_vendor, license_expiry }
+    if (!Array.isArray(licenses)) { await transaction.rollback(); return res.status(400).json({ success: false, message: 'licenses must be an array' }); }
+
+    // Delete existing, insert new
+    await models.SoftwareLicense.destroy({ where: { asset_id: req.params.id }, transaction });
+    const created = await Promise.all(
+      licenses
+        .filter(l => l.license_key?.trim())
+        .map(l => models.SoftwareLicense.create({
+          asset_id: req.params.id,
+          license_key: l.license_key?.trim() || null,
+          license_vendor: l.license_vendor?.trim() || null,
+          license_expiry: l.license_expiry || null
+        }, { transaction }))
+    );
+
+    await transaction.commit();
+    res.json({ success: true, message: 'Licenses saved', data: { licenses: created } });
+  } catch (err) {
+    await transaction.rollback();
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/assets/:id/licenses/:licenseId
+router.delete('/:id/licenses/:licenseId', async (req, res) => {
+  try {
+    const deleted = await models.SoftwareLicense.destroy({
+      where: { id: req.params.licenseId, asset_id: req.params.id }
+    });
+    if (!deleted) return res.status(404).json({ success: false, message: 'License not found' });
+    res.json({ success: true, message: 'License deleted' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 module.exports = router;

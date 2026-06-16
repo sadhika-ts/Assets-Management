@@ -25,22 +25,30 @@ const STATUS_TRANSITIONS = {
   cancelled: null,   // terminal — no changes allowed
 };
 
-const STATUS_STYLES = {
-  pending:   'bg-amber-100 text-amber-800 border-amber-200',
-  ordered:   'bg-blue-100 text-blue-800 border-blue-200',
-  received:  'bg-emerald-100 text-emerald-800 border-emerald-200',
-  cancelled: 'bg-red-100 text-red-800 border-red-200',
+const STATUS_BADGE = {
+  pending:   { badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',   dot: 'bg-amber-400' },
+  ordered:   { badge: 'bg-blue-500/15 text-blue-400 border border-blue-500/30',       dot: 'bg-blue-400' },
+  received:  { badge: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30', dot: 'bg-emerald-400' },
+  cancelled: { badge: 'bg-red-500/15 text-red-400 border border-red-500/30',           dot: 'bg-red-400' },
 };
 
 // Inline editable status dropdown
 const StatusDropdown = ({ purchase, onStatusChange, updating }) => {
-  const style = STATUS_STYLES[purchase.status] || 'bg-gray-100 text-gray-700 border-gray-200';
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  const s = STATUS_BADGE[purchase.status] || { badge: 'bg-slate-700 text-slate-300 border border-slate-600', dot: 'bg-slate-400' };
   const options = STATUS_TRANSITIONS[purchase.status];
+
+  React.useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   if (updating) {
     return (
-      <span className="flex items-center gap-1 text-xs text-gray-500">
-        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+      <span className="flex items-center gap-1.5 text-xs text-slate-400">
+        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
@@ -49,25 +57,48 @@ const StatusDropdown = ({ purchase, onStatusChange, updating }) => {
     );
   }
 
-  // Terminal statuses — show plain badge, no dropdown
+  // Terminal statuses — plain badge only
   if (!options) {
     return (
-      <span className={`text-xs font-semibold rounded-full px-3 py-1 border ${style}`}>
+      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 ${s.badge}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
         {purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1)}
       </span>
     );
   }
 
   return (
-    <select
-      value={purchase.status}
-      onChange={e => onStatusChange(purchase.id, e.target.value)}
-      className={`text-xs font-semibold rounded-full px-3 py-1 border cursor-pointer appearance-none pr-6 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400 ${style}`}
-    >
-      {options.map(s => (
-        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-      ))}
-    </select>
+    <div className="relative inline-block" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 cursor-pointer transition-all hover:opacity-80 ${s.badge}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+        {purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1)}
+        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[130px] bg-slate-800 border border-slate-700 rounded-xl shadow-2xl shadow-black/40 overflow-hidden">
+          {options.map(opt => {
+            const os = STATUS_BADGE[opt] || { badge: '', dot: 'bg-slate-400' };
+            const isCurrent = opt === purchase.status;
+            return (
+              <button key={opt}
+                onClick={() => { if (!isCurrent) onStatusChange(purchase.id, opt); setOpen(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left transition-colors
+                  ${isCurrent
+                    ? 'bg-slate-700/60 text-slate-200 cursor-default'
+                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${os.dot}`} />
+                {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                {isCurrent && <svg className="w-3 h-3 ml-auto text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -125,6 +156,171 @@ const PurchaseCard = ({ purchase, onView, onDelete }) => (
   </div>
 );
 
+// Purchase Detail Modal
+const PurchaseDetailModal = ({ purchaseId, onClose }) => {
+  const [purchase, setPurchase] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!purchaseId) return;
+    api.get(`/purchases/${purchaseId}`)
+      .then(res => setPurchase(res.data?.data?.purchase || null))
+      .catch(() => toast.error('Failed to load purchase details'))
+      .finally(() => setLoading(false));
+  }, [purchaseId]);
+
+  const Row = ({ label, value }) => (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
+      <span className="text-sm text-slate-200 font-medium">{value || '—'}</span>
+    </div>
+  );
+
+  const statusStyle = {
+    pending:   'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+    ordered:   'bg-blue-500/15 text-blue-400 border border-blue-500/30',
+    received:  'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+    cancelled: 'bg-red-500/15 text-red-400 border border-red-500/30',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Purchase Details</h2>
+              {purchase && <p className="text-xs text-slate-400 mt-0.5">{purchase.purchase_id}</p>}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-6 space-y-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <svg className="w-8 h-8 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            </div>
+          ) : !purchase ? (
+            <p className="text-center text-slate-400 py-12">Purchase not found</p>
+          ) : (
+            <>
+              {/* Status + Amount banner */}
+              <div className="flex items-center justify-between bg-slate-900/50 rounded-xl px-4 py-3 border border-slate-700/50">
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Total Amount</p>
+                  <p className="text-2xl font-bold text-white">
+                    ₹{parseFloat(purchase.total_amount || 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusStyle[purchase.status] || 'bg-slate-700 text-slate-300'}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                  {(purchase.status || '').charAt(0).toUpperCase() + (purchase.status || '').slice(1)}
+                </span>
+              </div>
+
+              {/* Order Info */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 bg-blue-500 rounded-full" />
+                  <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Order Information</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4 bg-slate-900/30 rounded-xl p-4 border border-slate-700/40">
+                  <Row label="PO Number" value={purchase.purchase_id} />
+                  <Row label="Purchase Date" value={purchase.purchase_date ? new Date(purchase.purchase_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null} />
+                  <Row label="Invoice Number" value={purchase.invoice_number} />
+                  <Row label="Payment Method" value={purchase.payment_method} />
+                  {purchase.notes && <div className="col-span-2"><Row label="Notes" value={purchase.notes} /></div>}
+                </div>
+              </div>
+
+              {/* Vendor Info */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 bg-purple-500 rounded-full" />
+                  <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Vendor Information</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4 bg-slate-900/30 rounded-xl p-4 border border-slate-700/40">
+                  <div className="col-span-2"><Row label="Vendor Name" value={purchase.vendor_name} /></div>
+                  <Row label="Contact" value={purchase.vendor_contact} />
+                  <Row label="Email" value={purchase.vendor_email} />
+                  {purchase.vendor_address && <div className="col-span-2"><Row label="Vendor Address" value={purchase.vendor_address} /></div>}
+                  {purchase.billing_address && <Row label="Billing Address" value={purchase.billing_address} />}
+                  {purchase.shipping_address && <Row label="Shipping Address" value={purchase.shipping_address} />}
+                </div>
+              </div>
+
+              {/* Linked Assets — only show if assets exist */}
+              {purchase.assets && purchase.assets.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest">
+                      Linked Assets <span className="text-emerald-400 normal-case font-normal">({purchase.assets.length})</span>
+                    </h3>
+                  </div>
+                  <div className="bg-slate-900/30 rounded-xl border border-slate-700/40 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-700/50">
+                          <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Tag</th>
+                          <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</th>
+                          <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Category</th>
+                          <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                          <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Assigned</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/30">
+                        {purchase.assets.map(a => (
+                          <tr key={a.id} className="hover:bg-slate-700/20 transition-colors">
+                            <td className="px-4 py-2.5 font-mono text-xs text-blue-400 font-semibold">{a.asset_tag}</td>
+                            <td className="px-4 py-2.5 text-slate-300 text-xs">{a.asset_name || a.sub_type}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{a.category} / {a.sub_type}</td>
+                            <td className="px-4 py-2.5">
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                a.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' :
+                                a.status === 'retired' ? 'bg-red-500/15 text-red-400' :
+                                'bg-slate-600 text-slate-300'
+                              }`}>{a.status}</span>
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{a.assigned_to || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end px-6 py-4 border-t border-slate-700 flex-shrink-0">
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-medium hover:bg-slate-700 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const Purchases = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -138,6 +334,7 @@ export const Purchases = () => {
   const [mockVendors, setMockVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
+  const [viewingId, setViewingId] = useState(null);
 
   useEffect(() => {
     fetchPurchases();
@@ -384,7 +581,7 @@ export const Purchases = () => {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
                     <tr>
-                      {['PO ID','Vendor','Date','Amount','Status'].map(h => (
+                      {['PO ID','Vendor','Date','Amount','Status','Action'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -403,6 +600,17 @@ export const Purchases = () => {
                               <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">₹{fmt}</td>
                               <td className="px-4 py-3">
                                 <StatusDropdown purchase={p} onStatusChange={handleStatusChange} updating={updatingId === p.id} />
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => setViewingId(p.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 text-xs font-semibold border border-blue-500/20 transition-colors whitespace-nowrap">
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                  View
+                                </button>
                               </td>
                             </tr>
                           );
@@ -540,6 +748,11 @@ export const Purchases = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Purchase Detail Modal */}
+        {viewingId && (
+          <PurchaseDetailModal purchaseId={viewingId} onClose={() => setViewingId(null)} />
         )}
 
         {/* Delete modal */}

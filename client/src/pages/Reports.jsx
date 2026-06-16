@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '../layouts/AppLayout';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
+import { backendApi } from '../api/axios';
 
 // ── helpers ─────────────────────────────────────────────────────
 const fmtDate = d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -52,8 +53,11 @@ const REPORT_ICONS = {
   retired_assets:      'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
   all_purchases:       'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
   vendor_spend:        'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
-  all_contracts:       'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-  expiring_contracts:  'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z',
+  all_contracts:        'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  expiring_contracts:   'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z',
+  all_warranties:       'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  expiring_warranties:  'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  expired_warranties:   'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z',
 };
 
 // ── Report definitions ───────────────────────────────────────────
@@ -128,6 +132,27 @@ const REPORTS = [
     description: 'Contracts expiring within the next 60 days.',
     filters: [],
   },
+  {
+    id: 'all_warranties',
+    title: 'All Warranties',
+    color: 'blue',
+    description: 'Complete list of all asset warranties with provider, type, and validity.',
+    filters: ['warrantyStatus'],
+  },
+  {
+    id: 'expiring_warranties',
+    title: 'Expiring Warranties',
+    color: 'amber',
+    description: 'Warranties expiring within the next 30 days.',
+    filters: [],
+  },
+  {
+    id: 'expired_warranties',
+    title: 'Expired Warranties',
+    color: 'red',
+    description: 'Warranties that have already expired and may need renewal.',
+    filters: [],
+  },
 ];
 
 const COLOR_MAP = {
@@ -140,6 +165,7 @@ const COLOR_MAP = {
   cyan:   { icon: 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400',   badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',   hover: 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400'   },
   pink:   { icon: 'bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400',   badge: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',   hover: 'group-hover:text-pink-600 dark:group-hover:text-pink-400'   },
   green:  { icon: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400', badge: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', hover: 'group-hover:text-green-600 dark:group-hover:text-green-400' },
+  amber:  { icon: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', hover: 'group-hover:text-amber-600 dark:group-hover:text-amber-400' },
 };
 
 // ── Main component ───────────────────────────────────────────────
@@ -147,6 +173,7 @@ export const Reports = () => {
   const [assets, setAssets] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [warranties, setWarranties] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Active report state
@@ -161,18 +188,21 @@ export const Reports = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPurchaseStatus, setFilterPurchaseStatus] = useState('all');
   const [filterContractStatus, setFilterContractStatus] = useState('all');
+  const [filterWarrantyStatus, setFilterWarrantyStatus] = useState('all');
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [aRes, pRes, cRes] = await Promise.allSettled([
+        const [aRes, pRes, cRes, wRes] = await Promise.allSettled([
           api.get('/assets?limit=500'),
           api.get('/purchases?limit=500'),
           api.get('/contracts?limit=500'),
+          backendApi.get('/warranties?limit=500'),
         ]);
         if (aRes.status === 'fulfilled') setAssets(aRes.value.data?.data?.assets || []);
         if (pRes.status === 'fulfilled') setPurchases(pRes.value.data?.data?.purchases || []);
         if (cRes.status === 'fulfilled') setContracts(cRes.value.data?.data?.contracts || []);
+        if (wRes.status === 'fulfilled') setWarranties(wRes.value.data?.data?.warranties || []);
       } catch { toast.error('Failed to load data'); }
       finally { setLoading(false); }
     };
@@ -333,6 +363,52 @@ export const Reports = () => {
             'Value': fmtCurrency(c.contract_value),
           }));
       }
+      case 'all_warranties': {
+        return warranties
+          .filter(w => filterWarrantyStatus === 'all' || w.status === filterWarrantyStatus)
+          .map(w => ({
+            'Asset Tag': w.asset?.asset_tag || '—',
+            'Asset Name': w.asset?.asset_name || '—',
+            'Provider': w.warranty_provider || '—',
+            'Type': w.warranty_type || '—',
+            'Warranty #': w.warranty_number || '—',
+            'Contact': w.contact_number || '—',
+            'Start Date': fmtDate(w.start_date),
+            'End Date': fmtDate(w.end_date),
+            'Days Left': w.days_left != null ? (w.days_left < 0 ? `Expired ${Math.abs(w.days_left)}d ago` : `${w.days_left}d`) : '—',
+            'Status': w.status,
+          }));
+      }
+      case 'expiring_warranties': {
+        return warranties
+          .filter(w => w.status === 'expiring_soon')
+          .sort((a, b) => (a.days_left ?? 999) - (b.days_left ?? 999))
+          .map(w => ({
+            'Asset Tag': w.asset?.asset_tag || '—',
+            'Asset Name': w.asset?.asset_name || '—',
+            'Provider': w.warranty_provider || '—',
+            'Type': w.warranty_type || '—',
+            'Warranty #': w.warranty_number || '—',
+            'End Date': fmtDate(w.end_date),
+            'Days Left': w.days_left != null ? `${w.days_left}d` : '—',
+            'Contact': w.contact_number || '—',
+          }));
+      }
+      case 'expired_warranties': {
+        return warranties
+          .filter(w => w.status === 'expired')
+          .sort((a, b) => new Date(b.end_date) - new Date(a.end_date))
+          .map(w => ({
+            'Asset Tag': w.asset?.asset_tag || '—',
+            'Asset Name': w.asset?.asset_name || '—',
+            'Provider': w.warranty_provider || '—',
+            'Type': w.warranty_type || '—',
+            'Warranty #': w.warranty_number || '—',
+            'Expired On': fmtDate(w.end_date),
+            'Expired Days Ago': w.days_left != null ? `${Math.abs(w.days_left)}d ago` : '—',
+            'Contact': w.contact_number || '—',
+          }));
+      }
       default: return [];
     }
   };
@@ -344,6 +420,7 @@ export const Reports = () => {
     setDateFrom(''); setDateTo('');
     setFilterCategory('all'); setFilterStatus('all');
     setFilterPurchaseStatus('all'); setFilterContractStatus('all');
+    setFilterWarrantyStatus('all');
     setTimeout(() => {
       const rows = buildRows(report.id);
       setPreviewRows(rows);
@@ -355,7 +432,7 @@ export const Reports = () => {
   useEffect(() => {
     if (!activeReport) return;
     setPreviewRows(buildRows(activeReport.id));
-  }, [dateFrom, dateTo, filterCategory, filterStatus, filterPurchaseStatus, filterContractStatus, assets, purchases, contracts]);
+  }, [dateFrom, dateTo, filterCategory, filterStatus, filterPurchaseStatus, filterContractStatus, filterWarrantyStatus, assets, purchases, contracts, warranties]);
 
   const handleExport = (format) => {
     if (!previewRows.length) { toast.error('No data to export'); return; }
@@ -500,6 +577,18 @@ export const Reports = () => {
                     </select>
                   </div>
                 )}
+                {report.filters.includes('warrantyStatus') && (
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Status</label>
+                    <select value={filterWarrantyStatus} onChange={e => setFilterWarrantyStatus(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-200">
+                      <option value="all">All</option>
+                      <option value="active">Active</option>
+                      <option value="expiring_soon">Expiring Soon</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -559,9 +648,10 @@ export const Reports = () => {
   }
 
   // ── Report catalogue screen ──────────────────────────────────────
-  const assetReports = REPORTS.filter(r => ['all_assets','it_assets','non_it_assets','assigned_assets','unassigned_assets','retired_assets'].includes(r.id));
+  const assetReports    = REPORTS.filter(r => ['all_assets','it_assets','non_it_assets','assigned_assets','unassigned_assets','retired_assets'].includes(r.id));
   const purchaseReports = REPORTS.filter(r => ['all_purchases','vendor_spend'].includes(r.id));
   const contractReports = REPORTS.filter(r => ['all_contracts','expiring_contracts'].includes(r.id));
+  const warrantyReports = REPORTS.filter(r => ['all_warranties','expiring_warranties','expired_warranties'].includes(r.id));
 
   const counts = {
     all_assets: assets.length,
@@ -577,6 +667,9 @@ export const Reports = () => {
       const in60 = new Date(); in60.setDate(in60.getDate() + 60);
       return contracts.filter(c => { const t = new Date(c.active_till); return t >= new Date() && t <= in60; }).length;
     })(),
+    all_warranties:      warranties.length,
+    expiring_warranties: warranties.filter(w => w.status === 'expiring_soon').length,
+    expired_warranties:  warranties.filter(w => w.status === 'expired').length,
   };
 
   const ReportCard = ({ report }) => {
@@ -619,12 +712,13 @@ export const Reports = () => {
         </div>
 
         {/* Quick summary strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
-            { label: 'Total Assets',    value: assets.length,                from: 'from-blue-500',   to: 'to-blue-600'   },
-            { label: 'Total Purchases', value: purchases.length,             from: 'from-purple-500', to: 'to-purple-600' },
-            { label: 'Total Contracts', value: contracts.length,             from: 'from-teal-500',   to: 'to-teal-600'   },
-            { label: 'Expiring Soon',   value: counts.expiring_contracts,    from: 'from-orange-500', to: 'to-orange-600' },
+            { label: 'Total Assets',      value: assets.length,               from: 'from-blue-500',   to: 'to-blue-600'   },
+            { label: 'Total Purchases',   value: purchases.length,            from: 'from-purple-500', to: 'to-purple-600' },
+            { label: 'Total Contracts',   value: contracts.length,            from: 'from-teal-500',   to: 'to-teal-600'   },
+            { label: 'Total Warranties',  value: warranties.length,           from: 'from-blue-600',   to: 'to-indigo-600' },
+            { label: 'Expiring Soon',     value: counts.expiring_contracts + counts.expiring_warranties, from: 'from-orange-500', to: 'to-orange-600' },
           ].map((s, i) => (
             <div key={i} className={`bg-gradient-to-br ${s.from} ${s.to} text-white rounded-2xl p-5 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200`}>
               <p className="text-white/70 text-xs font-medium uppercase tracking-wide">{s.label}</p>
@@ -663,6 +757,17 @@ export const Reports = () => {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {contractReports.map(r => <ReportCard key={r.id} report={r} />)}
+          </div>
+        </div>
+
+        {/* Warranty reports */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 bg-blue-500 rounded-full" />
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Warranty Reports</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {warrantyReports.map(r => <ReportCard key={r.id} report={r} />)}
           </div>
         </div>
 

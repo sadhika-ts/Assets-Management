@@ -11,6 +11,7 @@ const purchasesRoutes = require('./routes/purchases');
 const contractsRoutes = require('./routes/contracts');
 const reportsRoutes = require('./routes/reports');
 const authRoutes = require('./routes/auth');
+const warrantiesRoutes = require('./routes/warranties');
 
 // Middleware
 app.use(cors({
@@ -42,6 +43,7 @@ app.use('/api/purchases', purchasesRoutes);
 app.use('/api/contracts', contractsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/warranties', warrantiesRoutes);
 
 // 404 handler - MUST be last
 app.use((req, res) => {

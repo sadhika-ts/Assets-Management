@@ -23,6 +23,7 @@ const assetTagPrefixes = {
     'Headset': 'HED',
     'Mobile': 'MOB',
     'Tablet': 'TAB',
+    'Software License': 'SWL',
     'Other': 'IT-OTH'
   },
   'Non-IT': {

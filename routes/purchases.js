@@ -119,27 +119,9 @@ router.get(
   }
 );
 
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const purchase = await models.Purchase.findByPk(req.params.id, {
-      include: [
-        {
-          association: 'assets',
-          attributes: [
-            'id',
-            'asset_tag',
-            'category',
-            'sub_type',
-            'serial_no',
-            'mac_address',
-            'status',
-            'assigned_to',
-            'created_at'
-          ],
-          through: { attributes: [] }
-        }
-      ]
-    });
+    const purchase = await models.Purchase.findByPk(req.params.id);
 
     if (!purchase) {
       return res.status(404).json({
@@ -149,10 +131,16 @@ router.get('/:id', verifyToken, async (req, res) => {
       });
     }
 
+    // Fetch assets linked to this purchase
+    const assets = await models.Asset.findAll({
+      where: { purchase_id: req.params.id },
+      attributes: ['id', 'asset_tag', 'asset_name', 'category', 'sub_type', 'serial_no', 'mac_address', 'status', 'assigned_to', 'created_at']
+    });
+
     res.json({
       success: true,
       message: 'Purchase retrieved successfully',
-      data: { purchase }
+      data: { purchase: { ...purchase.toJSON(), assets } }
     });
   } catch (error) {
     console.error('Get purchase error:', error);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { AppLayout } from '../layouts/AppLayout';
+import { AttachmentSection } from '../components/AttachmentSection';
 import api from '../api/axios';
 
 // Toast Component
@@ -38,6 +39,7 @@ const subTypeOptions = {
     { value: 'Headset', label: 'Headset / Earphones' },
     { value: 'Mobile', label: 'Mobile Phone' },
     { value: 'Tablet', label: 'Tablet' },
+    { value: 'Software License', label: 'Software License' },
     { value: 'Other', label: 'Other' }
   ],
   'Non-IT': [
@@ -96,6 +98,9 @@ const generateAssetTagFromAPI = async (category, subType) => {
   }
 };
 
+
+const EMPTY_LICENSE = { license_key: '', license_vendor: '', license_expiry: '' };
+
 export const AssetForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -107,6 +112,7 @@ export const AssetForm = () => {
   const [toast, setToast] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [users, setUsers] = useState([]);
+  const [licenses, setLicenses] = useState([{ ...EMPTY_LICENSE }]);
 
   const {
     control,
@@ -151,6 +157,7 @@ export const AssetForm = () => {
   const selectedStatus = watch('status');
   const msOfficeEnabled = watch('ms_office');
   const otherApplicationsEnabled = watch('other_applications_installed');
+  const isSoftwareLicense = selectedSubType === 'Software License';
 
   // Fetch asset data if editing
   useEffect(() => {
@@ -201,6 +208,12 @@ export const AssetForm = () => {
             configuration: asset.detail?.configuration || '',
             others: asset.detail?.others || ''
           });
+          // Load licenses from DB
+          try {
+            const licRes = await api.get(`/assets/${id}/licenses`);
+            const dbLics = licRes.data.data?.licenses || [];
+            setLicenses(dbLics.length > 0 ? dbLics : [{ ...EMPTY_LICENSE }]);
+          } catch { setLicenses([{ ...EMPTY_LICENSE }]); }
         }
       } catch (err) {
         setToast({
@@ -310,38 +323,23 @@ export const AssetForm = () => {
         other_applications_description: data.other_applications_installed ? data.other_applications_description : undefined,
         software_list: data.software_list || undefined,
         configuration: data.configuration || undefined,
-        others: data.others || undefined
+        others: data.others || undefined,
+        software_licenses: isSoftwareLicense ? licenses.filter(l => l.license_key.trim()) : undefined
       };
 
 
       if (isEditMode) {
-        const response = await api.put(`/assets/${id}`, payload);
-
-        setToast({
-          message: '✅ Asset updated successfully',
-          type: 'success'
-        });
-
-        setTimeout(() => {
-          navigate('/assets');
-        }, 1500);
+        const editRes = await api.put(`/assets/${id}`, payload);
+        const assetId = editRes.data.data?.asset?.id || id;
+        if (isSoftwareLicense) await api.post(`/assets/${assetId}/licenses`, { licenses });
+        setToast({ message: '✅ Asset updated successfully', type: 'success' });
+        setTimeout(() => navigate('/assets'), 1500);
       } else {
         const response = await api.post('/assets', payload);
-
         const assetId = response.data.data?.id || response.data.data?.asset?.id;
-
-        // Show success message BEFORE redirecting
-        setToast({
-          message: '✅ Data stored successfully - Asset created',
-          type: 'success'
-        });
-
-        // Give user time to see the success message before redirecting
-        setTimeout(() => {
-          const assetTag = payload.asset_tag;
-          // Navigate to assets list with refresh flag to show new asset
-          navigate(`/assets?refresh=true&new=${assetTag}`);
-        }, 2000);
+        if (isSoftwareLicense && assetId) await api.post(`/assets/${assetId}/licenses`, { licenses });
+        setToast({ message: '✅ Data stored successfully - Asset created', type: 'success' });
+        setTimeout(() => navigate(`/assets?refresh=true&new=${payload.asset_tag}`), 2000);
       }
     } catch (err) {
       console.error('Form submission error:', {
@@ -473,7 +471,7 @@ export const AssetForm = () => {
                   <input
                     {...field}
                     type="text"
-                    placeholder={selectedCategory === 'Non-IT' ? "e.g., Executive Chair" : "e.g., Dell Laptop"}
+                    placeholder={isSoftwareLicense ? "e.g., Microsoft Office 365" : selectedCategory === 'Non-IT' ? "e.g., Executive Chair" : "e.g., Dell Laptop"}
                     className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       errors.asset_name ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -540,35 +538,18 @@ export const AssetForm = () => {
               </div>
             )}
 
-            {/* Serial Number */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Serial Number</label>
-              <Controller
-                name="serial_no"
-                control={control}
-                render={({ field }) => (
-                  <input
-                    {...field}
-                    type="text"
-                    placeholder="e.g., DELL-123456"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                )}
-              />
-            </div>
-
-            {/* MAC Address - Only for IT assets */}
-            {selectedCategory === 'IT' && (
+            {/* Serial Number — hidden for Software License */}
+            {!isSoftwareLicense && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">MAC Address</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Serial Number</label>
                 <Controller
-                  name="mac_address"
+                  name="serial_no"
                   control={control}
                   render={({ field }) => (
                     <input
                       {...field}
                       type="text"
-                      placeholder="e.g., 00:1A:2B:3C:4D:5E"
+                      placeholder="e.g., DELL-123456"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   )}
@@ -576,78 +557,183 @@ export const AssetForm = () => {
               </div>
             )}
 
-            {/* Purchase Dropdown - Shows Last 10 Recent Purchases */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Purchase <span className="text-xs text-gray-500">(Last 10 Recent)</span>
-              </label>
-              <Controller
-                name="purchase_id"
-                control={control}
-                render={({ field }) => (
-                  <select
-                    {...field}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select a purchase</option>
-                    {purchases.map((purchase) => {
-                      const purchaseDate = new Date(purchase.purchase_date).toLocaleDateString('en-IN');
-                      const displayText = `${purchase.purchase_id} - ${purchase.vendor_name} (${purchaseDate}) - ₹${parseFloat(purchase.total_amount).toLocaleString()}`;
-                      return (
-                        <option key={purchase.id} value={purchase.id}>
-                          {displayText}
-                        </option>
-                      );
-                    })}
-                  </select>
-                )}
-              />
-              {purchases.length === 0 && (
-                <p className="text-xs text-gray-500 mt-1">No purchases available. Create a purchase order first.</p>
-              )}
-            </div>
+            {/* Multi-license block — spans full width, shown only for Software License sub-type */}
+            {isSoftwareLicense && (
+              <div className="col-span-2">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    Software Licenses
+                    <span className="ml-2 text-xs text-gray-400 dark:text-slate-500">({licenses.length} {licenses.length === 1 ? 'entry' : 'entries'})</span>
+                  </label>
+                  <button type="button"
+                    onClick={() => setLicenses(prev => [...prev, { ...EMPTY_LICENSE }])}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add License
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {licenses.map((lic, idx) => (
+                    <div key={idx} className="relative border border-gray-200 dark:border-slate-600 rounded-xl p-4 bg-gray-50 dark:bg-slate-900/40">
+                      {licenses.length > 1 && (
+                        <button type="button"
+                          onClick={() => setLicenses(prev => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-3 right-3 p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          title="Remove this license">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                          </svg>
+                        </button>
+                      )}
+                      <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-3">
+                        License #{idx + 1}
+                      </p>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">License Key</label>
+                          <input type="text" value={lic.license_key} placeholder="XXXXX-XXXXX-XXXXX"
+                            onChange={e => setLicenses(prev => prev.map((l, i) => i === idx ? { ...l, license_key: e.target.value } : l))}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Vendor</label>
+                          <input type="text" value={lic.license_vendor} placeholder="e.g., Microsoft"
+                            onChange={e => setLicenses(prev => prev.map((l, i) => i === idx ? { ...l, license_vendor: e.target.value } : l))}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Expiry Date</label>
+                          <input type="date" value={lic.license_expiry}
+                            onChange={e => setLicenses(prev => prev.map((l, i) => i === idx ? { ...l, license_expiry: e.target.value } : l))}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            {/* Assigned To Dropdown - Disabled for Inactive/Disposed */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Assigned To
-                {selectedStatus !== 'active' && (
-                  <span className="text-gray-500 text-xs ml-2">(Disabled for {selectedStatus} assets)</span>
-                )}
-              </label>
-              <Controller
-                name="assigned_to"
-                control={control}
-                render={({ field }) => (
-                  <select
-                    {...field}
-                    disabled={selectedStatus !== 'active'}
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      selectedStatus !== 'active'
-                        ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-300'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select a user</option>
-                    {users.map((user) => (
-                      <option key={user.id} value={user.name}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              />
-              {selectedStatus !== 'active' && (
-                <p className="text-gray-500 text-xs mt-1">
-                  Cannot assign {selectedStatus} assets. Change status to Active to assign a user.
-                </p>
-              )}
-            </div>
+            {/* MAC Address - Only for IT assets, not Software License */}
+            {selectedCategory === 'IT' && !isSoftwareLicense && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">MAC Address</label>
+                <Controller
+                  name="mac_address"
+                  control={control}
+                  rules={{
+                    validate: val => {
+                      if (!val || !val.trim()) return true;
+                      return /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(val.trim())
+                        || 'Invalid MAC address. Use format XX:XX:XX:XX:XX:XX (0-9, A-F)';
+                    }
+                  }}
+                  render={({ field }) => (
+                    <input
+                      {...field}
+                      type="text"
+                      placeholder="e.g., 00:1A:2B:3C:4D:5E"
+                      maxLength={17}
+                      onChange={e => {
+                        // Auto-insert colons and force uppercase
+                        let val = e.target.value.replace(/[^0-9A-Fa-f:]/g, '').toUpperCase();
+                        // Auto-add colon after every 2 hex chars if user isn't deleting
+                        const raw = val.replace(/:/g, '');
+                        if (raw.length <= 12 && e.target.value.length > field.value.length) {
+                          val = raw.match(/.{1,2}/g)?.join(':') || val;
+                        }
+                        field.onChange(val.slice(0, 17));
+                      }}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono ${
+                        errors.mac_address ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    />
+                  )}
+                />
+                {errors.mac_address
+                  ? <p className="text-red-600 text-xs mt-1">{errors.mac_address.message}</p>
+                  : <p className="text-gray-400 text-xs mt-1">Only hex characters (0–9, A–F). Auto-formatted as XX:XX:XX:XX:XX:XX</p>
+                }
+              </div>
+            )}
+
+            {/* Purchase + Assigned To — hidden for Software License */}
+            {!isSoftwareLicense && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Purchase <span className="text-xs text-gray-500">(Last 10 Recent)</span>
+                  </label>
+                  <Controller
+                    name="purchase_id"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        {...field}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select a purchase</option>
+                        {purchases.map((purchase) => {
+                          const purchaseDate = new Date(purchase.purchase_date).toLocaleDateString('en-IN');
+                          const displayText = `${purchase.purchase_id} - ${purchase.vendor_name} (${purchaseDate}) - ₹${parseFloat(purchase.total_amount).toLocaleString()}`;
+                          return (
+                            <option key={purchase.id} value={purchase.id}>
+                              {displayText}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+                  />
+                  {purchases.length === 0 && (
+                    <p className="text-xs text-gray-500 mt-1">No purchases available. Create a purchase order first.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assigned To
+                    {selectedStatus !== 'active' && (
+                      <span className="text-gray-500 text-xs ml-2">(Disabled for {selectedStatus} assets)</span>
+                    )}
+                  </label>
+                  <Controller
+                    name="assigned_to"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        {...field}
+                        disabled={selectedStatus !== 'active'}
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          selectedStatus !== 'active'
+                            ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-300'
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        <option value="">Select a user</option>
+                        {users.map((user) => (
+                          <option key={user.id} value={user.name}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  />
+                  {selectedStatus !== 'active' && (
+                    <p className="text-gray-500 text-xs mt-1">
+                      Cannot assign {selectedStatus} assets. Change status to Active to assign a user.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* SECTION 2 - Technical Details (IT only) */}
-        {selectedCategory === 'IT' && (
+        {/* SECTION 2 - Technical Details (IT only, not Software License) */}
+        {selectedCategory === 'IT' && !isSoftwareLicense && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-6">Technical Details</h3>
 
@@ -981,6 +1067,20 @@ export const AssetForm = () => {
             </div>
           </div>
         )}
+
+        {/* SECTION 3 - Document Attachments */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 p-6 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+              <svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100">Document Attachments</h3>
+            <span className="text-xs text-gray-400 dark:text-slate-500 ml-1">(optional)</span>
+          </div>
+          <AttachmentSection storageKey={watch('asset_tag') ? `asset_attachments_${watch('asset_tag')}` : null} />
+        </div>
 
         {/* Submit Buttons */}
         <div className="flex gap-3 justify-end">

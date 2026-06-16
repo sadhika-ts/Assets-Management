@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
+import { AttachmentSection } from '../components/AttachmentSection';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useVendors } from '../hooks/useVendors';
@@ -228,7 +229,11 @@ export const ContractForm = () => {
 
         const contractId = response.data.data?.contract?.contract_id;
         setGeneratedContractId(contractId);
-
+        const pending = localStorage.getItem('contract_attachments_pending');
+        if (pending && contractId) {
+          localStorage.setItem(`contract_attachments_${contractId}`, pending);
+          localStorage.removeItem('contract_attachments_pending');
+        }
         toast.success(`✅ Contract ${contractId} created successfully`);
 
         setTimeout(() => {
@@ -634,37 +639,14 @@ export const ContractForm = () => {
             />
           </div>
 
-          {/* Section 7: Document Upload */}
-          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2">
+          {/* Section 7: Document Attachments */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-slate-700">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4 flex items-center gap-2">
               <span className="bg-teal-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">7</span>
-              Document Upload
+              Document Attachments
+              <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">(optional)</span>
             </h3>
-
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <p className="text-gray-600 mb-4">Upload contract document (PDF, DOCX, JPG, PNG)</p>
-              <input
-                type="file"
-                accept=".pdf,.docx,.jpg,.jpeg,.png"
-                onChange={handleDocumentUpload}
-                className="hidden"
-                id="document-input"
-              />
-              <label htmlFor="document-input" className="cursor-pointer">
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('document-input').click()}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  📄 Choose File
-                </button>
-              </label>
-              {documentFile && (
-                <p className="text-sm text-green-600 mt-4">
-                  ✓ File selected: {documentFile.name}
-                </p>
-              )}
-            </div>
+            <AttachmentSection storageKey={generatedContractId ? `contract_attachments_${generatedContractId}` : (id ? `contract_attachments_${id}` : 'contract_attachments_pending')} />
           </div>
 
           {/* Form Actions */}

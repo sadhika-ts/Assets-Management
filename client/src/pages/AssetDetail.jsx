@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
+import { AttachmentSection } from '../components/AttachmentSection';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'qrcode';
@@ -71,6 +72,7 @@ const buildQrPayload = (a) => {
   if (a.detail?.os_type) lines.push(`OS: ${a.detail.os_type}${a.detail.os_version ? ' ' + a.detail.os_version : ''}`);
   return lines.join('\n');
 };
+
 
 export const AssetDetail = () => {
   const navigate = useNavigate();
@@ -353,6 +355,46 @@ export const AssetDetail = () => {
               </SectionCard>
             )}
           </div>
+
+          {/* Software Licenses from DB */}
+          {asset.licenses && asset.licenses.length > 0 && (
+            <SectionCard title="Software Licenses" icon="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z">
+              <div className="space-y-3">
+                {asset.licenses.map((lic, i) => (
+                  <div key={lic.id || i} className="border border-gray-100 dark:border-slate-700 rounded-xl p-3 bg-gray-50 dark:bg-slate-900/40">
+                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-2">License #{i + 1}</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {lic.license_key && (
+                        <div>
+                          <p className="text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">Key</p>
+                          <p className="text-sm font-mono text-gray-800 dark:text-slate-200 break-all">{lic.license_key}</p>
+                        </div>
+                      )}
+                      {lic.license_vendor && (
+                        <div>
+                          <p className="text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">Vendor</p>
+                          <p className="text-sm text-gray-800 dark:text-slate-200">{lic.license_vendor}</p>
+                        </div>
+                      )}
+                      {lic.license_expiry && (
+                        <div>
+                          <p className="text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">Expiry</p>
+                          <p className="text-sm text-gray-800 dark:text-slate-200">
+                            {new Date(lic.license_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Attachments */}
+          <SectionCard title="Document Attachments" icon="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13">
+            <AttachmentSection storageKey={`asset_attachments_${asset.asset_tag}`} readOnly />
+          </SectionCard>
         </div>
       </div>
     </AppLayout>

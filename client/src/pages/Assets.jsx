@@ -93,7 +93,7 @@ const AssetCard = ({ asset, onView, onEdit }) => {
 export const Assets = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('assetsViewMode') || 'list');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -205,7 +205,7 @@ export const Assets = () => {
                 </svg>
                 CSV
               </button>
-              <button onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
+              <button onClick={() => setViewMode(v => { const next = v === 'list' ? 'grid' : 'list'; localStorage.setItem('assetsViewMode', next); return next; })}
                 title={viewMode === 'list' ? 'Grid view' : 'List view'}
                 className="p-2 border border-gray-200 dark:border-slate-600 rounded-xl text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                 {viewMode === 'list'
