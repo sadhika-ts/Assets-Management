@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const NAV = [
   { path: '/dashboard', label: 'Dashboard', icon: (
@@ -37,7 +38,14 @@ const NAV = [
 export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const isActive = (p) => location.pathname === p || location.pathname.startsWith(p + '/');
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <>
@@ -105,9 +113,9 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
         </nav>
 
         {/* Footer */}
-        <div className="border-t border-slate-700/40 p-3">
+        <div className="border-t border-slate-700/40 p-3 space-y-1">
           {!collapsed && (
-            <div className="flex items-center gap-2.5 px-2 py-2 mb-2 rounded-xl bg-slate-800/60">
+            <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-slate-800/60">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-300 leading-tight">Admin</p>
@@ -115,6 +123,19 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
               </div>
             </div>
           )}
+
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            title="Logout"
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors group ${collapsed ? 'justify-center' : ''}`}
+          >
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            {!collapsed && <span className="text-sm font-medium">Logout</span>}
+          </button>
+
           <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'}`}>
             <button onClick={() => setCollapsed(c => !c)}
               className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700/60 transition-colors"

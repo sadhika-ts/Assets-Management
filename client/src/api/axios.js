@@ -255,7 +255,7 @@ if (USE_MOCK_API) {
 
 // Direct backend client — bypasses mock interceptors, always hits real server
 export const backendApi = axios.create({
-  baseURL: 'http://localhost:5000/api'
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 });
 
 export default api;
