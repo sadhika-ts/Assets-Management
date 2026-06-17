@@ -68,14 +68,16 @@ export const Dashboard = () => {
   const [assets, setAssets] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [warranties, setWarranties] = useState([]);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [aRes, pRes, cRes] = await Promise.allSettled([
+        const [aRes, pRes, cRes, wRes] = await Promise.allSettled([
           api.get('/assets?limit=500'),
           api.get('/purchases?limit=500'),
           api.get('/contracts?limit=500'),
+          api.get('/warranties'),
         ]);
         if (aRes.status === 'fulfilled') {
           const d = aRes.value.data?.data;
@@ -88,6 +90,10 @@ export const Dashboard = () => {
         if (cRes.status === 'fulfilled') {
           const d = cRes.value.data?.data;
           setContracts(Array.isArray(d?.contracts) ? d.contracts : Array.isArray(d) ? d : []);
+        }
+        if (wRes.status === 'fulfilled') {
+          const d = wRes.value.data?.data;
+          setWarranties(d?.warranties || []);
         }
       } finally {
         setLoading(false);
@@ -199,6 +205,13 @@ export const Dashboard = () => {
       .slice(0, 5);
   }, [contracts]);
 
+  const expiringWarrantiesList = useMemo(() =>
+    warranties
+      .filter(w => w.status === 'expiring_soon' || w.status === 'expired')
+      .sort((a, b) => new Date(a.end_date) - new Date(b.end_date))
+      .slice(0, 5),
+    [warranties]);
+
   const fmtCurrency = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const daysLeft = (till) => Math.ceil((new Date(till) - new Date()) / 86400000);
@@ -260,7 +273,7 @@ export const Dashboard = () => {
         </div>
 
         {/* ── Stat cards row 2 ── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <StatCard label="Active Contracts" value={metrics.activeContracts} color="teal" icon="📋"
             onClick={() => navigate('/contracts')} />
           <StatCard label="Expiring ≤ 30 days" value={metrics.expiringContracts} color="orange" icon="⚠️"
@@ -269,6 +282,9 @@ export const Dashboard = () => {
             sub={`${metrics.purchasesThisMonth} this month`} onClick={() => navigate('/purchases')} />
           <StatCard label="Pending Orders" value={purchases.filter(p => p.status === 'pending' || p.status === 'ordered').length}
             color="pink" icon="🕐" onClick={() => navigate('/purchases')} />
+          <StatCard label="Warranties Expiring" value={warranties.filter(w => w.status === 'expiring_soon').length}
+            color="red" icon="🛡️" sub={`${warranties.filter(w => w.status === 'expired').length} expired`}
+            onClick={() => navigate('/warranty')} />
         </div>
 
         {/* ── Charts row 1 ── */}
@@ -345,8 +361,8 @@ export const Dashboard = () => {
           )}
         </Card>
 
-        {/* ── Bottom section: 3 lists ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* ── Bottom section: 4 lists ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-5">
 
           {/* Recently added assets */}
           <Card title="Recently Added Assets"
@@ -420,6 +436,38 @@ export const Dashboard = () => {
                           {d <= 0 ? 'Expired' : `${d}d left`}
                         </p>
                         <p className="text-xs text-gray-400">{fmtDate(c.active_till)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/* Expiring warranties */}
+          <Card title="Warranties Expiring Soon"
+            action={<button onClick={() => navigate('/warranty')} className="text-xs text-blue-600 hover:underline">View all</button>}>
+            {expiringWarrantiesList.length === 0
+              ? <EmptyState msg="No warranties expiring soon 🎉" />
+              : (
+              <div className="space-y-3">
+                {expiringWarrantiesList.map(w => {
+                  const d = w.days_left != null ? w.days_left : Math.ceil((new Date(w.end_date) - new Date()) / 86400000);
+                  return (
+                    <div key={w.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">
+                          {w.asset?.asset_name || w.asset_name || '—'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {w.asset?.asset_tag || w.asset_tag || '—'} · {w.warranty_provider || '—'}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <p className={`text-sm font-bold ${d <= 0 ? 'text-red-600' : d <= 7 ? 'text-red-500' : 'text-orange-500'}`}>
+                          {d <= 0 ? 'Expired' : `${d}d left`}
+                        </p>
+                        <p className="text-xs text-gray-400">{fmtDate(w.end_date)}</p>
                       </div>
                     </div>
                   );

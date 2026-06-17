@@ -156,6 +156,257 @@ const PurchaseCard = ({ purchase, onView, onDelete }) => (
   </div>
 );
 
+// Edit Purchase Modal
+const EditPurchaseModal = ({ purchaseId, onClose, onSaved }) => {
+  const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (!purchaseId) return;
+    api.get(`/purchases/${purchaseId}`)
+      .then(res => {
+        const p = res.data?.data?.purchase || {};
+        setForm({
+          vendor_name:     p.vendor_name     || '',
+          vendor_contact:  p.vendor_contact  || '',
+          vendor_email:    p.vendor_email    || '',
+          billing_address: p.billing_address || '',
+          shipping_address:p.shipping_address|| '',
+          purchase_date:   p.purchase_date   ? p.purchase_date.slice(0, 10) : '',
+          total_amount:    p.total_amount    != null ? String(p.total_amount) : '',
+          status:          p.status          || 'pending',
+          invoice_number:  p.invoice_number  || '',
+          payment_method:  p.payment_method  || '',
+          notes:           p.notes           || '',
+        });
+      })
+      .catch(() => toast.error('Failed to load purchase'))
+      .finally(() => setLoading(false));
+  }, [purchaseId]);
+
+  const validateContact = (val) => {
+    if (!val.trim()) return '';
+    if (!/^\d+$/.test(val.trim()))  return 'Only numbers are allowed';
+    if (val.trim().length < 7)      return 'Too short — need at least 7 digits';
+    if (val.trim().length > 15)     return 'Too long — max 15 digits';
+    return '';
+  };
+
+  const set = (field) => (e) => {
+    const val = e.target.value;
+    setForm(f => ({ ...f, [field]: val }));
+    if (field === 'vendor_contact') {
+      setErrors(er => ({ ...er, vendor_contact: validateContact(val) }));
+    } else {
+      setErrors(er => ({ ...er, [field]: '' }));
+    }
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.vendor_name.trim()) e.vendor_name = 'Vendor name is required';
+    if (!form.purchase_date) e.purchase_date = 'Purchase date is required';
+    if (form.total_amount !== '' && isNaN(parseFloat(form.total_amount))) e.total_amount = 'Must be a valid number';
+    if (form.vendor_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.vendor_email)) e.vendor_email = 'Invalid email';
+    const contactErr = validateContact(form.vendor_contact);
+    if (contactErr) e.vendor_contact = contactErr;
+    return e;
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        vendor_name:      form.vendor_name.trim(),
+        vendor_contact:   form.vendor_contact.trim(),
+        vendor_email:     form.vendor_email.trim() || undefined,
+        billing_address:  form.billing_address.trim(),
+        shipping_address: form.shipping_address.trim(),
+        purchase_date:    form.purchase_date || undefined,
+        total_amount:     form.total_amount !== '' ? parseFloat(form.total_amount) : undefined,
+        status:           form.status,
+      };
+      await api.put(`/purchases/${purchaseId}`, payload);
+      toast.success('Purchase updated successfully');
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update purchase');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const Field = ({ label, error, hint, children }) => (
+    <div>
+      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{label}</label>
+      {children}
+      {error
+        ? <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+            </svg>
+            {error}
+          </p>
+        : hint
+          ? <p className="text-slate-500 text-xs mt-1">{hint}</p>
+          : null
+      }
+    </div>
+  );
+
+  const Input = ({ field, type = 'text', placeholder }) => (
+    <input
+      type={type}
+      value={form[field]}
+      onChange={set(field)}
+      placeholder={placeholder}
+      className={`w-full px-3 py-2 rounded-lg border text-sm bg-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${errors[field] ? 'border-red-500' : 'border-slate-600'}`}
+    />
+  );
+
+  const phoneErr = errors.vendor_contact;
+  const phoneIsValid = form?.vendor_contact?.length >= 7 && !phoneErr;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </div>
+            <h2 className="text-base font-bold text-white">Edit Purchase</h2>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <svg className="w-8 h-8 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            </div>
+          ) : !form ? (
+            <p className="text-center text-slate-400 py-12">Purchase not found</p>
+          ) : (
+            <form id="edit-purchase-form" onSubmit={handleSave} className="space-y-5">
+
+              {/* Vendor section */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3">Vendor Information</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <Field label="Vendor Name *" error={errors.vendor_name}>
+                      <Input field="vendor_name" placeholder="Vendor name" />
+                    </Field>
+                  </div>
+                  <Field label="Contact" error={errors.vendor_contact} hint="Numbers only (7–15 digits)">
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        value={form.vendor_contact}
+                        onChange={e => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 15);
+                          setForm(f => ({ ...f, vendor_contact: digits }));
+                          setErrors(er => ({ ...er, vendor_contact: '' }));
+                        }}
+                        onBlur={() => setErrors(er => ({ ...er, vendor_contact: validateContact(form.vendor_contact) }))}
+                        placeholder="e.g. 9876543210"
+                        className={`w-full px-3 py-2 pr-9 rounded-lg border text-sm bg-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all
+                          ${phoneErr ? 'border-red-500 focus:ring-red-500' : phoneIsValid ? 'border-emerald-500 focus:ring-emerald-500' : 'border-slate-600'}`}
+                      />
+                      {phoneIsValid && (
+                        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                      )}
+                      {phoneErr && (
+                        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                        </svg>
+                      )}
+                    </div>
+                  </Field>
+                  <Field label="Email" error={errors.vendor_email}>
+                    <Input field="vendor_email" type="email" placeholder="vendor@email.com" />
+                  </Field>
+                  <Field label="Billing Address" error={errors.billing_address}>
+                    <Input field="billing_address" placeholder="Billing address" />
+                  </Field>
+                  <Field label="Shipping Address" error={errors.shipping_address}>
+                    <Input field="shipping_address" placeholder="Shipping address" />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-700" />
+
+              {/* Order section */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3">Order Information</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Purchase Date *" error={errors.purchase_date}>
+                    <Input field="purchase_date" type="date" />
+                  </Field>
+                  <Field label="Total Amount (₹)" error={errors.total_amount}>
+                    <Input field="total_amount" placeholder="0.00" />
+                  </Field>
+                  <Field label="Status" error={errors.status}>
+                    <select
+                      value={form.status}
+                      onChange={set('status')}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-600 text-sm bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                      {STATUS_OPTIONS.map(s => (
+                        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Payment Method" error={errors.payment_method}>
+                    <Input field="payment_method" placeholder="e.g. Bank Transfer" />
+                  </Field>
+                </div>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && form && (
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-700 flex-shrink-0">
+            <button type="button" onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-medium hover:bg-slate-700 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" form="edit-purchase-form" disabled={saving}
+              className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold transition-colors shadow-lg shadow-violet-500/25 disabled:opacity-60 flex items-center gap-2">
+              {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>}
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Purchase Detail Modal
 const PurchaseDetailModal = ({ purchaseId, onClose }) => {
   const [purchase, setPurchase] = useState(null);

@@ -55,8 +55,9 @@ const ICON_PATHS = {
   laptop:  'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
 };
 
-const AssetCard = ({ asset, onView, onEdit }) => {
+const AssetCard = ({ asset, purchaseId, onView, onEdit }) => {
   const assignee = displayAssignee(asset.assigned_to);
+  const po = purchaseId || asset.purchase?.purchase_id;
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 p-5 flex flex-col gap-3 group">
       <div className="flex items-start justify-between gap-2">
@@ -74,6 +75,13 @@ const AssetCard = ({ asset, onView, onEdit }) => {
         <span className="text-gray-400 dark:text-slate-500">Assigned</span>
         <span className={`font-medium text-right truncate ${assignee === '—' ? 'text-gray-300 dark:text-slate-600' : 'text-gray-700 dark:text-slate-300'}`}>
           {assignee === '—' ? 'Unassigned' : assignee}
+        </span>
+        <span className="text-gray-400 dark:text-slate-500">Purchase</span>
+        <span className="text-right">
+          {po
+            ? <span className="font-mono font-semibold text-violet-600 dark:text-violet-400">{po}</span>
+            : <span className="text-gray-300 dark:text-slate-600">—</span>
+          }
         </span>
       </div>
       <div className="flex gap-2 pt-1">
@@ -98,15 +106,35 @@ export const Assets = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [assets, setAssets] = useState([]);
+  const [purchaseMap, setPurchaseMap] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAssets(); }, [searchParams]);
 
   const fetchAssets = async () => {
     try {
-      const res = await api.get('/assets?limit=500');
-      const list = res.data?.data?.assets || [];
+      const [aRes, pRes] = await Promise.allSettled([
+        api.get('/assets?limit=500'),
+        api.get('/purchases?limit=500'),
+      ]);
+
+      const list = aRes.status === 'fulfilled'
+        ? (aRes.value.data?.data?.assets || [])
+        : [];
       setAssets(list);
+
+      if (pRes.status === 'fulfilled') {
+        const purchases = pRes.value.data?.data?.purchases || pRes.value.data || [];
+        const map = {};
+        purchases.forEach(p => {
+          (p.assets || []).forEach(a => { map[a.id] = p.purchase_id; });
+          if (p.asset_id) map[p.asset_id] = p.purchase_id;
+        });
+        // also map by purchase_id field on asset itself (backend join)
+        list.forEach(a => { if (a.purchase_id && a.purchase?.purchase_id) map[a.id] = a.purchase.purchase_id; });
+        setPurchaseMap(map);
+      }
+
       if (searchParams.get('refresh') === 'true') toast.success('Assets list updated!');
     } catch { toast.error('Failed to load assets'); }
     finally { setLoading(false); }
@@ -241,7 +269,7 @@ export const Assets = () => {
                   <p className="text-gray-500 dark:text-slate-400 font-medium">No assets match your filters</p>
                   <p className="text-gray-400 dark:text-slate-500 text-sm">Try adjusting your search or filters</p>
                 </div>
-              : filtered.map(a => <AssetCard key={a.id} asset={a} onView={id => navigate(`/assets/${id}`)} onEdit={id => navigate(`/assets/${id}/edit`)} />)
+              : filtered.map(a => <AssetCard key={a.id} asset={a} purchaseId={purchaseMap[a.id]} onView={id => navigate(`/assets/${id}`)} onEdit={id => navigate(`/assets/${id}/edit`)} />)
             }
           </div>
         ) : (
@@ -251,14 +279,14 @@ export const Assets = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
-                    {['Asset Tag','Name','Type','Status','Assigned To','Serial','Actions'].map(h => (
+                    {['Asset Tag','Name','Type','Status','Assigned To','Purchase','Serial','Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-slate-700">
                   {filtered.length === 0
-                    ? <tr><td colSpan={7} className="px-4 py-20 text-center">
+                    ? <tr><td colSpan={8} className="px-4 py-20 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <svg className="w-10 h-10 text-gray-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
@@ -280,6 +308,14 @@ export const Assets = () => {
                         </td>
                         <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                         <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{displayAssignee(a.assigned_to)}</td>
+                        <td className="px-4 py-3">
+                          {(purchaseMap[a.id] || a.purchase?.purchase_id)
+                            ? <span className="font-mono text-xs font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-md">
+                                {purchaseMap[a.id] || a.purchase?.purchase_id}
+                              </span>
+                            : <span className="text-gray-300 dark:text-slate-600">—</span>
+                          }
+                        </td>
                         <td className="px-4 py-3 font-mono text-gray-400 dark:text-slate-500 text-xs">{a.serial_no || a.detail?.serial_no || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 opacity-70 group-hover:opacity-100 transition-opacity">

@@ -13,6 +13,7 @@ import { Reports } from './pages/Reports';
 import { Warranty } from './pages/Warranty';
 import { NotFound } from './pages/NotFound';
 import { Login } from './pages/Login';
+import { Settings } from './pages/Settings';
 import { PrivateRoute } from './components/PrivateRoute';
 
 function App() {
@@ -34,6 +35,7 @@ function App() {
         <Route path="/contracts/:id/edit" element={<PrivateRoute><ContractForm /></PrivateRoute>} />
         <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
         <Route path="/warranty" element={<PrivateRoute><Warranty /></PrivateRoute>} />
+        <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
