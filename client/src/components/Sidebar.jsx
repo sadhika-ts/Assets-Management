@@ -122,7 +122,6 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-300 leading-tight">{currentUser?.username || 'Admin'}</p>
-                <p className="text-[10px] text-slate-500 truncate">IT Department</p>
               </div>
             </div>
           )}

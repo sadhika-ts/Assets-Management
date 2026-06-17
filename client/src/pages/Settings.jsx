@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { getEmployees, addEmployee, removeEmployee } from '../utils/employeeStore';
 
 const PASSWORD_RULES = [
   { id: 'len',     label: 'At least 8 characters',        test: v => v.length >= 8 },
@@ -64,6 +65,13 @@ export const Settings = () => {
   const { currentUser, updateCredentials, logout } = useAuth();
   const navigate = useNavigate();
 
+  // ── Employee (assignable users) management ────────────────────────────
+  const [employees, setEmployees]     = useState(() => getEmployees());
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName]         = useState('');
+  const [nameError, setNameError]     = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
   const [username, setUsername]               = useState(currentUser?.username || 'admin');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword]         = useState('');
@@ -73,6 +81,29 @@ export const Settings = () => {
   const [showConfirm, setShowConfirm]         = useState(false);
   const [errors, setErrors]                   = useState({});
   const [saving, setSaving]                   = useState(false);
+
+  const handleAddEmployee = (e) => {
+    e.preventDefault();
+    const trimmed = newName.trim();
+    if (!trimmed) { setNameError('Name cannot be empty'); return; }
+    if (trimmed.length < 2) { setNameError('Name must be at least 2 characters'); return; }
+    if (employees.some(emp => emp.name.toLowerCase() === trimmed.toLowerCase())) {
+      setNameError('This name already exists');
+      return;
+    }
+    const updated = addEmployee(trimmed);
+    setEmployees(updated);
+    setNewName('');
+    setShowAddForm(false);
+    toast.success(`"${trimmed}" added`);
+  };
+
+  const handleRemoveEmployee = (emp) => {
+    const updated = removeEmployee(emp.id);
+    setEmployees(updated);
+    setConfirmDeleteId(null);
+    toast.success(`"${emp.name}" removed`);
+  };
 
   const strength = newPassword ? getStrength(newPassword) : 0;
   const meta = newPassword ? STRENGTH_META[strength] : null;
@@ -130,7 +161,7 @@ export const Settings = () => {
 
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Settings</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Manage your login credentials</p>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Manage your login credentials and users</p>
         </div>
 
         <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-lg overflow-hidden">
@@ -142,7 +173,7 @@ export const Settings = () => {
             </div>
             <div>
               <p className="text-white font-bold text-lg leading-tight">{currentUser?.username || 'admin'}</p>
-              <p className="text-blue-200 text-xs mt-0.5">IT Department · Administrator</p>
+              <p className="text-blue-200 text-xs mt-0.5">Administrator</p>
             </div>
           </div>
 
@@ -261,6 +292,93 @@ export const Settings = () => {
 
           </form>
         </div>
+        {/* Employee / Assignable Users Management */}
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <div>
+              <p className="text-sm font-bold text-slate-100">Assignable Users</p>
+              <p className="text-xs text-slate-500 mt-0.5">{employees.length} people · shown in "Assign To" dropdown</p>
+            </div>
+            <button onClick={() => { setShowAddForm(v => !v); setNewName(''); setNameError(''); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors">
+              {showAddForm
+                ? <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg> Cancel</>
+                : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg> Add Person</>
+              }
+            </button>
+          </div>
+
+          {/* Add form */}
+          {showAddForm && (
+            <form onSubmit={handleAddEmployee} className="px-6 py-4 border-b border-slate-700 bg-slate-900/40">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Full Name</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={e => { setNewName(e.target.value); setNameError(''); }}
+                  placeholder="e.g. Ramesh Kumar"
+                  autoFocus
+                  className={`flex-1 px-3 py-2 rounded-lg border text-sm bg-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${nameError ? 'border-red-500' : 'border-slate-600'}`}
+                />
+                <button type="submit"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors whitespace-nowrap">
+                  Add
+                </button>
+              </div>
+              {nameError && <p className="text-red-400 text-xs mt-1.5">{nameError}</p>}
+            </form>
+          )}
+
+          {/* Employee list */}
+          <div className="divide-y divide-slate-700/40 max-h-80 overflow-y-auto">
+            {employees.length === 0 ? (
+              <p className="text-center text-slate-500 text-sm py-8">No assignable users yet</p>
+            ) : employees.map(emp => (
+              <div key={emp.id} className="relative overflow-hidden">
+                {/* Normal row */}
+                <div className={`flex items-center gap-3 px-6 py-2.5 transition-all duration-200 ${confirmDeleteId === emp.id ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-slate-300 text-xs font-bold flex-shrink-0">
+                    {emp.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="flex-1 text-sm text-slate-200 truncate">{emp.name}</span>
+                  <button onClick={() => setConfirmDeleteId(emp.id)}
+                    title="Remove"
+                    className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Inline confirm overlay */}
+                {confirmDeleteId === emp.id && (
+                  <div className="absolute inset-0 flex items-center justify-between px-4 bg-red-950/60 backdrop-blur-sm animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        </svg>
+                      </div>
+                      <span className="text-xs text-red-300 font-medium truncate">Remove <span className="font-bold text-red-200">"{emp.name}"</span>?</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      <button onClick={() => setConfirmDeleteId(null)}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">
+                        Keep
+                      </button>
+                      <button onClick={() => handleRemoveEmployee(emp)}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500 transition-colors">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </AppLayout>
   );

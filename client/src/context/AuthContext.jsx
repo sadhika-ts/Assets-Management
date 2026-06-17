@@ -56,6 +56,33 @@ export const AuthProvider = ({ children }) => {
     }
   }, [currentUser]);
 
+  const listUsers = useCallback(async () => {
+    try {
+      const res = await API.get('/auth/users');
+      return { success: true, users: res.data.data.users };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message || 'Failed to fetch users.' };
+    }
+  }, []);
+
+  const addUser = useCallback(async ({ username, password, role }) => {
+    try {
+      const res = await API.post('/auth/users', { username, password, role });
+      return { success: true, user: res.data.data.user };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message || 'Failed to create user.' };
+    }
+  }, []);
+
+  const removeUser = useCallback(async (id) => {
+    try {
+      await API.delete(`/auth/users/${id}`);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message || 'Failed to delete user.' };
+    }
+  }, []);
+
   const canCreate = useCallback(() => true, []);
   const canEdit   = useCallback(() => true, []);
   const canDelete = useCallback(() => true, []);
@@ -64,6 +91,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       isAuthenticated, currentUser,
       login, logout, updateCredentials,
+      listUsers, addUser, removeUser,
       canCreate, canEdit, canDelete,
     }}>
       {children}

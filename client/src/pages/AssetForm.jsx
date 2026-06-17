@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { AppLayout } from '../layouts/AppLayout';
 import { AttachmentSection } from '../components/AttachmentSection';
 import api from '../api/axios';
+import { getEmployees } from '../utils/employeeStore';
 
 // Toast Component
 const Toast = ({ message, type, onClose }) => {
@@ -58,25 +59,6 @@ const subTypeOptions = {
 };
 
 // User list for "Assigned To" field
-const userList = [
-  { id: 1, name: 'Prakash' },
-  { id: 2, name: 'Vaidyanathan' },
-  { id: 3, name: 'Hema Priya' },
-  { id: 4, name: 'Leojudej' },
-  { id: 5, name: 'Srinivasan.r' },
-  { id: 6, name: 'Ratchika' },
-  { id: 7, name: 'Priyanka.s' },
-  { id: 8, name: 'Kishore' },
-  { id: 9, name: 'Manjula.M' },
-  { id: 10, name: 'Siyasamy R' },
-  { id: 11, name: 'Geetha' },
-  { id: 12, name: 'Leelavathi.m' },
-  { id: 13, name: 'Vaishnavi' },
-  { id: 14, name: 'Jyappan A' },
-  { id: 15, name: 'Jeevitha.R' },
-  { id: 16, name: 'Sree Sree' },
-  { id: 17, name: 'Siddhartha Gho' }
-];
 // Remove empty email display from dropdown
 const formatUserName = (name) => name;
 
@@ -163,8 +145,8 @@ export const AssetForm = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Set static user list and fetch purchases
-        setUsers(userList);
+        // Load employee list from localStorage store
+        setUsers(getEmployees());
 
         const purchasesRes = await api.get('/purchases?limit=500');
         // Sort by date descending and take last 10
