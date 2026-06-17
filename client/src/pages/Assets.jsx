@@ -104,6 +104,7 @@ export const Assets = () => {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('assetsViewMode') || 'list');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterIT, setFilterIT] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [assets, setAssets] = useState([]);
   const [purchaseMap, setPurchaseMap] = useState({});
@@ -140,14 +141,20 @@ export const Assets = () => {
     finally { setLoading(false); }
   };
 
-  const subTypeOptions = [...new Set(assets.map(a => a.sub_type).filter(Boolean))].sort();
+  const subTypeOptions = [...new Set(
+    assets
+      .filter(a => filterIT === 'all' || a.category === filterIT)
+      .map(a => a.sub_type)
+      .filter(Boolean)
+  )].sort();
 
   const filtered = assets.filter(a => {
     const q = searchTerm.toLowerCase();
     const matchSearch = !q || a.asset_name?.toLowerCase().includes(q) || a.asset_tag?.toLowerCase().includes(q) || a.assigned_to?.toLowerCase().includes(q);
+    const matchIT     = filterIT === 'all'       || a.category === filterIT;
     const matchCat    = filterCategory === 'all' || a.sub_type === filterCategory;
     const matchStatus = filterStatus === 'all'   || a.status   === filterStatus;
-    return matchSearch && matchCat && matchStatus;
+    return matchSearch && matchIT && matchCat && matchStatus;
   });
 
   const handleExport = () => {
@@ -210,6 +217,19 @@ export const Assets = () => {
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500" />
             </div>
+            {/* IT / Non-IT toggle */}
+            <div className="flex rounded-xl border border-gray-200 dark:border-slate-600 overflow-hidden text-sm">
+              {[['all', 'All'], ['IT', 'IT'], ['Non-IT', 'Non-IT']].map(([val, label]) => (
+                <button key={val} onClick={() => { setFilterIT(val); setFilterCategory('all'); }}
+                  className={`px-3 py-2 font-medium transition-colors whitespace-nowrap
+                    ${filterIT === val
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-50 dark:bg-slate-900 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                    }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             {/* Type filter */}
             <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
               className="px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-200 min-w-[140px]">
@@ -247,8 +267,8 @@ export const Assets = () => {
             <p className="text-xs text-gray-400 dark:text-slate-500">
               Showing <span className="font-semibold text-gray-600 dark:text-slate-300">{filtered.length}</span> of <span className="font-semibold text-gray-600 dark:text-slate-300">{assets.length}</span> assets
             </p>
-            {(searchTerm || filterCategory !== 'all' || filterStatus !== 'all') && (
-              <button onClick={() => { setSearchTerm(''); setFilterCategory('all'); setFilterStatus('all'); }}
+            {(searchTerm || filterIT !== 'all' || filterCategory !== 'all' || filterStatus !== 'all') && (
+              <button onClick={() => { setSearchTerm(''); setFilterIT('all'); setFilterCategory('all'); setFilterStatus('all'); }}
                 className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium transition-colors">
                 Clear filters
               </button>
