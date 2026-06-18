@@ -8,6 +8,7 @@ const Contract = require('./Contract');
 const AuditLog = require('./AuditLog');
 const SoftwareLicense = require('./SoftwareLicense');
 const Warranty = require('./Warranty');
+const Employee = require('./Employee');
 
 const models = {
   User: User(sequelize),
@@ -17,7 +18,8 @@ const models = {
   Contract: Contract(sequelize),
   AuditLog: AuditLog(sequelize),
   SoftwareLicense: SoftwareLicense(sequelize),
-  Warranty: Warranty(sequelize)
+  Warranty: Warranty(sequelize),
+  Employee: Employee(sequelize),
 };
 
 Object.values(models).forEach((model) => {

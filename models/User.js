@@ -7,17 +7,19 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
+    username: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true
+    },
     name: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: true
     },
     email: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-      validate: {
-        isEmail: true
-      }
+      allowNull: true,
+      unique: true
     },
     password_hash: {
       type: DataTypes.STRING,
@@ -25,7 +27,7 @@ module.exports = (sequelize) => {
     },
     role: {
       type: DataTypes.ENUM('admin', 'staff', 'viewer'),
-      defaultValue: 'staff',
+      defaultValue: 'admin',
       allowNull: false
     },
     created_at: {
@@ -39,7 +41,6 @@ module.exports = (sequelize) => {
   });
 
   User.associate = (models) => {
-    User.hasMany(models.Asset, { foreignKey: 'assigned_to', as: 'assignedAssets' });
     User.hasMany(models.AuditLog, { foreignKey: 'user_id', as: 'auditLogs' });
   };
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { getEmployees, addEmployee, removeEmployee } from '../utils/employeeStore';
+import { getEmployeesFromDB, addEmployeeToDB, removeEmployeeFromDB } from '../utils/employeeStore';
 
 const PASSWORD_RULES = [
   { id: 'len',     label: 'At least 8 characters',        test: v => v.length >= 8 },
@@ -66,11 +66,19 @@ export const Settings = () => {
   const navigate = useNavigate();
 
   // ── Employee (assignable users) management ────────────────────────────
-  const [employees, setEmployees]     = useState(() => getEmployees());
+  const [employees, setEmployees]     = useState([]);
+  const [empLoading, setEmpLoading]   = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName]         = useState('');
   const [nameError, setNameError]     = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  useEffect(() => {
+    getEmployeesFromDB()
+      .then(list => setEmployees(list))
+      .catch(() => toast.error('Failed to load employees'))
+      .finally(() => setEmpLoading(false));
+  }, []);
 
   const [username, setUsername]               = useState(currentUser?.username || 'admin');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -82,27 +90,31 @@ export const Settings = () => {
   const [errors, setErrors]                   = useState({});
   const [saving, setSaving]                   = useState(false);
 
-  const handleAddEmployee = (e) => {
+  const handleAddEmployee = async (e) => {
     e.preventDefault();
     const trimmed = newName.trim();
     if (!trimmed) { setNameError('Name cannot be empty'); return; }
     if (trimmed.length < 2) { setNameError('Name must be at least 2 characters'); return; }
-    if (employees.some(emp => emp.name.toLowerCase() === trimmed.toLowerCase())) {
-      setNameError('This name already exists');
-      return;
+    try {
+      const emp = await addEmployeeToDB(trimmed);
+      setEmployees(prev => [...prev, emp]);
+      setNewName('');
+      setShowAddForm(false);
+      toast.success(`"${trimmed}" added`);
+    } catch (err) {
+      setNameError(err.response?.data?.message || 'Failed to add');
     }
-    const updated = addEmployee(trimmed);
-    setEmployees(updated);
-    setNewName('');
-    setShowAddForm(false);
-    toast.success(`"${trimmed}" added`);
   };
 
-  const handleRemoveEmployee = (emp) => {
-    const updated = removeEmployee(emp.id);
-    setEmployees(updated);
-    setConfirmDeleteId(null);
-    toast.success(`"${emp.name}" removed`);
+  const handleRemoveEmployee = async (emp) => {
+    try {
+      await removeEmployeeFromDB(emp.id);
+      setEmployees(prev => prev.filter(e => e.id !== emp.id));
+      setConfirmDeleteId(null);
+      toast.success(`"${emp.name}" removed`);
+    } catch {
+      toast.error('Failed to remove employee');
+    }
   };
 
   const strength = newPassword ? getStrength(newPassword) : 0;
@@ -297,7 +309,7 @@ export const Settings = () => {
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
             <div>
               <p className="text-sm font-bold text-slate-100">Assignable Users</p>
-              <p className="text-xs text-slate-500 mt-0.5">{employees.length} people · shown in "Assign To" dropdown</p>
+              <p className="text-xs text-slate-500 mt-0.5">{empLoading ? '…' : employees.length} people · shown in "Assign To" dropdown</p>
             </div>
             <button onClick={() => { setShowAddForm(v => !v); setNewName(''); setNameError(''); }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors">
@@ -332,7 +344,14 @@ export const Settings = () => {
 
           {/* Employee list */}
           <div className="divide-y divide-slate-700/40 max-h-80 overflow-y-auto">
-            {employees.length === 0 ? (
+            {empLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <svg className="w-5 h-5 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              </div>
+            ) : employees.length === 0 ? (
               <p className="text-center text-slate-500 text-sm py-8">No assignable users yet</p>
             ) : employees.map(emp => (
               <div key={emp.id} className="relative overflow-hidden">

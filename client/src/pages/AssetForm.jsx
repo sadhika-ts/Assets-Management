@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { AppLayout } from '../layouts/AppLayout';
 import { AttachmentSection } from '../components/AttachmentSection';
 import api from '../api/axios';
-import { getEmployees } from '../utils/employeeStore';
+import { getEmployeesFromDB } from '../utils/employeeStore';
 
 // Toast Component
 const Toast = ({ message, type, onClose }) => {
@@ -145,8 +145,9 @@ export const AssetForm = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Load employee list from localStorage store
-        setUsers(getEmployees());
+        // Load employee list from database
+        const empList = await getEmployeesFromDB();
+        setUsers(empList);
 
         const purchasesRes = await api.get('/purchases?limit=500');
         // Sort by date descending and take last 10
