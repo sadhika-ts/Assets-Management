@@ -6,7 +6,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN VITE_API_URL=/api npm run build
 
 # Serve with nginx
 FROM nginx:alpine
