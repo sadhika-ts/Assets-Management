@@ -551,13 +551,9 @@ COPY public.audit_logs (id, asset_id, user_id, action, old_value, new_value, cha
 
 
 --
+
 -- Data for Name: contracts; Type: TABLE DATA; Schema: public; Owner: postgres
 --
-
-COPY public.contracts (id, contract_id, contract_name, vendor_name, vendor_contact, vendor_email, vendor_phone, vendor_address, vendor_contact_person, active_from, active_till, contract_value, status, notes, description, created_at) FROM stdin;
-330e4f84-73db-4b74-b50d-97fe1802c25f	CON-0001	demo contract	BEST BUY LAPTOP	\N	khbkhjb@uyfjfj.conm	1234567891	dfdf	jkjk	2026-06-15 00:00:00	2026-06-26 00:00:00	2000000.00	expiring_soon	\N	dfdf	2026-06-15 10:09:31.369
-72fadb7b-3c86-4cc8-9f8d-ebed1daec8fc	CON-0002	demo contract 1	BRILYANT IT SOLUTIONS PVT LTD	\N	khbkhjb@uyfjfj.conm	9090909090	khjbkhjb	john	2026-06-16 00:00:00	2027-10-13 00:00:00	50000.00	active	\N	nothing to say	2026-06-16 05:09:23.246
-\.
 
 
 --
