@@ -170,30 +170,9 @@ const seedDatabase = async () => {
     ]);
     console.log(`✅ Created 5 asset details`);
 
-    // Seed Contracts
+    // Seed Contracts - Disabled (empty table)
     console.log('📜 Seeding contracts...');
-    const contracts = await Contract.bulkCreate([
-      {
-        id: uuidv4(),
-        contract_id: 'CON-2025-001',
-        contract_name: 'Dell Laptop AMC',
-        vendor_name: 'Dell Technologies',
-        active_from: new Date('2025-01-01'),
-        active_till: new Date('2026-01-01'),
-        status: 'active',
-        notes: 'Annual maintenance contract for Dell devices'
-      },
-      {
-        id: uuidv4(),
-        contract_id: 'CON-2025-002',
-        contract_name: 'Microsoft Office License',
-        vendor_name: 'Microsoft',
-        active_from: new Date('2025-02-01'),
-        active_till: new Date('2027-02-01'),
-        status: 'active',
-        notes: 'Enterprise Office Licensing'
-      }
-    ]);
+    const contracts = [];
     console.log(`✅ Created ${contracts.length} contracts`);
 
     console.log('\n✨ Database seeding completed successfully!');
