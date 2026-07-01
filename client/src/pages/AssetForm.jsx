@@ -83,6 +83,11 @@ const generateAssetTagFromAPI = async (category, subType) => {
 
 const EMPTY_LICENSE = { license_key: '', license_vendor: '', license_expiry: '' };
 
+// IT sub-types that are full computing devices (have OS, CPU, RAM, disk, etc.).
+// Everything else (Mouse, Keyboard, Monitor, cables, peripherals...) hides the
+// Technical Details section since those specs don't apply.
+const COMPUTING_SUBTYPES = ['Laptop', 'Desktop', 'Mobile', 'Tablet'];
+
 export const AssetForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -140,6 +145,9 @@ export const AssetForm = () => {
   const msOfficeEnabled = watch('ms_office');
   const otherApplicationsEnabled = watch('other_applications_installed');
   const isSoftwareLicense = selectedSubType === 'Software License';
+  // Only computing devices (Laptop, Desktop, Mobile, Tablet) show Technical Details.
+  // Peripherals like Mouse/Keyboard/Monitor have no OS/CPU/RAM/disk to record.
+  const hasTechnicalDetails = selectedCategory === 'IT' && COMPUTING_SUBTYPES.includes(selectedSubType);
 
   // Fetch asset data if editing
   useEffect(() => {
@@ -289,24 +297,28 @@ export const AssetForm = () => {
         // Only include MAC address for IT assets
         ...(data.category === 'IT' && { mac_address: data.mac_address || undefined }),
 
-        // IT specific fields
-        os_type: data.os_type || undefined,
-        os_version: data.os_version || undefined,
-        product_id: data.product_id || undefined,
-        os_activated: data.os_activated || false,
-        processor_name: data.processor_name || undefined,
-        manufacturer: data.manufacturer || undefined,
-        cores: data.cores ? parseInt(data.cores) : undefined,
-        ram_gb: data.ram_gb ? parseFloat(data.ram_gb) : undefined,
-        disk_gb: data.disk_gb ? parseFloat(data.disk_gb) : undefined,
-        disk_model: data.disk_model || undefined,
-        ms_office: data.ms_office || false,
-        office_key: data.ms_office ? data.office_key : undefined,
-        other_applications_installed: data.other_applications_installed || false,
-        other_applications_description: data.other_applications_installed ? data.other_applications_description : undefined,
-        software_list: data.software_list || undefined,
-        configuration: data.configuration || undefined,
-        others: data.others || undefined,
+        // Technical detail fields — only sent for computing devices that show the
+        // Technical Details section (Laptop/Desktop/Mobile/Tablet). Skipped for
+        // peripherals like Mouse/Keyboard/Monitor where these specs don't apply.
+        ...(hasTechnicalDetails && {
+          os_type: data.os_type || undefined,
+          os_version: data.os_version || undefined,
+          product_id: data.product_id || undefined,
+          os_activated: data.os_activated || false,
+          processor_name: data.processor_name || undefined,
+          manufacturer: data.manufacturer || undefined,
+          cores: data.cores ? parseInt(data.cores) : undefined,
+          ram_gb: data.ram_gb ? parseFloat(data.ram_gb) : undefined,
+          disk_gb: data.disk_gb ? parseFloat(data.disk_gb) : undefined,
+          disk_model: data.disk_model || undefined,
+          ms_office: data.ms_office || false,
+          office_key: data.ms_office ? data.office_key : undefined,
+          other_applications_installed: data.other_applications_installed || false,
+          other_applications_description: data.other_applications_installed ? data.other_applications_description : undefined,
+          software_list: data.software_list || undefined,
+          configuration: data.configuration || undefined,
+          others: data.others || undefined,
+        }),
         software_licenses: isSoftwareLicense ? licenses.filter(l => l.license_key.trim()) : undefined
       };
 
@@ -715,8 +727,8 @@ export const AssetForm = () => {
           </div>
         </div>
 
-        {/* SECTION 2 - Technical Details (IT only, not Software License) */}
-        {selectedCategory === 'IT' && !isSoftwareLicense && (
+        {/* SECTION 2 - Technical Details (computing devices only, not Software License) */}
+        {hasTechnicalDetails && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-6">Technical Details</h3>
 
