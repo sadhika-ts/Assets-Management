@@ -128,30 +128,7 @@ if (USE_MOCK_API) {
     }
   ];
 
-  const mockContracts = [
-    {
-      id: '1',
-      contract_id: 'CON-2025-001',
-      contract_name: 'Dell Laptop AMC',
-      vendor_name: 'Dell Technologies',
-      active_from: '2025-01-01',
-      active_till: '2026-01-01',
-      status: 'active',
-      contract_value: 150000,
-      notes: 'Annual maintenance contract for Dell devices'
-    },
-    {
-      id: '2',
-      contract_id: 'CON-2025-002',
-      contract_name: 'Microsoft Office License',
-      vendor_name: 'Microsoft',
-      active_from: '2025-02-01',
-      active_till: '2027-02-01',
-      status: 'active',
-      contract_value: 200000,
-      notes: 'Enterprise Office Licensing'
-    }
-  ];
+  const mockContracts = [];
 
   api.interceptors.request.use(async (config) => {
     // Don't intercept if already processed
